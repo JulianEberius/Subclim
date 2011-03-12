@@ -1,6 +1,6 @@
 import sublime_plugin, sublime
 import eclim
-import re, os
+import re, os, time
 
 def match(rex, str):
     m = rex.match(str)
@@ -32,7 +32,56 @@ class CompletionProposal(object):
             self.insert = name
         self.type = "None"
 
-class JavaEclimCompletions(sublime_plugin.EventListener):
+class JavaGotoDefinition(sublime_plugin.TextCommand):
+
+    def __init__(self, view):
+        super(JavaGotoDefinition,self).__init__(view)
+        s = sublime.load_settings("Eclim.sublime-settings")
+        eclim_executable = s.get("eclim_executable_location", None)
+        eclim.set_executable(eclim_executable)
+
+    def run(self, edit, block=False):
+        project, file = eclim.get_context(self.view)
+        pos = self.view.sel()[0]
+        word = self.view.word(pos)
+        locations = self.call_eclim(project, file, word.a, word.size())
+        locations = self.to_list(locations)
+        if len(locations) == 1:
+            if locations[0]['file'].endswith("java"):
+                self.go_to_location(locations[0])
+
+
+    def call_eclim(self, project, file, offset, ident_len, shell=True):
+        eclim.update_java_src(project, file)
+
+        go_to_cmd = "%s -command java_search \
+                                -n %s \
+                                -f %s \
+                                -o %i \
+                                -e utf-8 \
+                                -l %i" % (eclim.eclim_executable, project, file, offset, ident_len)
+        out = eclim.call_eclim(go_to_cmd)
+        return out
+        
+    def to_list(self, locations):
+        result = []
+        
+        locations = locations.splitlines()
+        for l in locations:
+            parts = l.split("|")
+            l_def = {"file":parts[0],
+                    "line":parts[1].split(" col ")[0],
+                    "col":parts[1].split(" col ")[1]}
+            result.append(l_def)
+        return result
+    
+    def go_to_location(self, loc):
+        f, l, c = loc['file'], loc['line'], loc['col']
+        path = f+":"+l+":"+c
+        sublime.active_window().open_file(
+            path,sublime.ENCODED_POSITION)
+
+class JavaCompletions(sublime_plugin.EventListener):
 
     def __init__(self):
         s = sublime.load_settings("Eclim.sublime-settings")
