@@ -22,6 +22,7 @@ The very first command or completion on startup can take very long. Subsequent o
 
 For keybindings see the keymaps in the plugin's directory (or the command palette).
 In addition to completions, the following commands are supported at the moment:
+
 - Go to definition
 - Import class under cursor
 - Run current class as Java application
