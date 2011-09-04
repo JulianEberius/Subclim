@@ -1,0 +1,17 @@
+[
+    { "keys": ["ctrl+f3"], "command": "java_goto_definition", "context":
+        [
+            { "key": "selector", "operator": "equal", "operand": "source.java" }
+        ]
+    },
+    { "keys": ["ctrl+alt+i"], "command": "java_import_class_under_cursor", "context":
+        [
+            { "key": "selector", "operator": "equal", "operand": "source.java" }
+        ]
+    },
+    { "keys": ["shift+ctrl+r"], "command": "java_run_class", "context":
+        [
+            { "key": "selector", "operator": "equal", "operand": "source.java" }
+        ]
+    }
+]

@@ -1,34 +1,54 @@
-#!/usr/bin/env python
-import sys, os, subprocess
+'''
+This module manages the connection to the Eclim server. It is responsible
+for sending the commands and parsing the responses of the server.
+It should be independent of any Sublime Text 2 API.
+
+There is one global variable 'eclim_executable' that needs to be set before
+using the module. It should point to the "eclim" executable in your Eclipse
+directory.
+'''
+
+import os
+import subprocess
 from xml.etree import ElementTree
+
+# points to eclim executable, see module-level comments
+eclim_executable = None
+
 
 class NotInEclipseProjectException(Exception):
     pass
 
-eclim_executable = None
-
-def set_executable(eclim_exec):
-    global eclim_executable
-    eclim_executable = eclim_exec
 
 def call_eclim(cmd):
+    ''' Generic call to eclim including error-handling '''
+    cmd = "%s %s" % (eclim_executable, cmd)
     popen = subprocess.Popen(
-        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,shell=True)
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
     out, err = popen.communicate()
+
+    # error handling
     if err or "Connection refused" in out:
         error_msg = 'Error connecting to Eclim server: '
-        if out: error_msg += out
-        if err: error_msg += err
+        if out:
+            error_msg += out
+        if err:
+            error_msg += err
         if "Connection refused" in out:
             error_msg += " Is Eclipse running?"
         raise Exception(error_msg)
     return out
 
-def get_context(view):
-    file_path = view.file_name()
+
+def get_context(file_path):
+    ''' Given an absolute file_path (e.g. as returned by ST2's
+    view.file_path()) it returns the Eclipse project name and file path
+    relative to the project root. It looks for the '.project' file that
+    Eclipse creates to do this.
+    '''
     project_dir = find_project_dir(file_path)
     project, file = None, None
-    
+
     if project_dir:
         project_file = os.path.join(project_dir, '.project')
         if not os.path.isfile(project_file):
@@ -37,136 +57,66 @@ def get_context(view):
             raise NotInEclipseProjectException()
         with open(project_file) as pf:
             project_desc = ElementTree.XML(pf.read())
-        project = project_desc.find('name').text
-        file = os.path.relpath(file_path, project_dir)
-        
+        try:
+            project = project_desc.find('name').text
+            file = os.path.relpath(file_path, project_dir)
+        except Exception, e:
+            raise Exception("Could not parse project file: %s.\nException: %s"
+                % (project_file, e))
+
     return project, file
 
+
 def find_project_dir(file_dir):
+    ''' tries to find a '.project' file as created by Eclipse to mark
+    project folders by traversing the directory tree upward from the given
+    directory'''
     def traverse_upward(look_for, start_at="."):
         p = os.path.abspath(start_at)
 
         while True:
             if look_for in os.listdir(p):
                 return p
-            new_p =  os.path.abspath(os.path.join(p, ".."))
+            new_p = os.path.abspath(os.path.join(p, ".."))
             if new_p == p:
                 return None
             p = new_p
 
-    return traverse_upward(".project", start_at=os.path.split(file_dir)[0])
+    if os.path.isfile(file_dir):
+        file_dir = os.path.dirname(file_dir)
+    return traverse_upward(".project", start_at=file_dir)
+
 
 def update_java_src(project, file):
-    global eclim_executable
-    update_cmd = '%s -command java_src_update \
-                        -p %s \
-                        -f %s \
-                        -v' % (eclim_executable, project, file)
+    '''Updates Eclipse's status regarding the given file.
+    I have forgotten what it actually does ;-)'''
+    update_cmd = '-command java_src_update \
+                    -p %s \
+                    -f %s \
+                    -v' % (project, file)
     out = call_eclim(update_cmd)
     return out
 
-def refresh_file(project, file):
-    global eclim_executable
-    refresh_cmd = '%s -command project_refresh_file \
-                        -p %s \
-                        -f %s ' % (eclim_executable, project, file)
-    out = call_eclim(refresh_cmd)
-    return out
 
 def get_problems(project):
-    global eclim_executable
-    get_problems_cmd = '%s -command problems \
-                        -p %s' % (eclim_executable, project)
+    ''' returs a list of problems that Eclipse found in the given project'''
+    get_problems_cmd = '-command problems \
+                        -p %s' % (project)
     out = call_eclim(get_problems_cmd)
     return out
-    
-def format_problems(problems):
-    result = ""
-    for pr in problems.split("\n"):
-        if not pr: continue
-        parts = pr.split("|")
-        result += parts[1].replace(" col ",":")+" "
-        result += parts[2]
-    return result
 
-def problems_to_dict(problems):
-    results = {"errors":[]}
-    for pr in problems.split("\n"):
-        if not pr: continue
+
+def parse_problems(problem_string):
+    '''Turns a problem message into a nice dict-representation'''
+    results = {"errors": []}
+    for pr in problem_string.split("\n"):
+        if not pr:
+            continue
         parts = pr.split("|")
         _file = os.path.split(parts[0])[1]
         filepath = parts[0]
         line = parts[1].split(" col ")[0]
         message = parts[2]
-        results["errors"].append({"file":_file, "line":line,
-                                "message":message, "filepath":filepath})
+        results["errors"].append({"file": _file, "line": line,
+                                "message": message, "filepath": filepath})
     return results
-
-# def close_error_window(window_token):
-#     cmd = DIALOG + " -x "+window_token
-#     popen = subprocess.Popen(
-#         cmd, stdin=None, stdout=None,shell=True)
-#     popen.communicate()
-
-# def show_error_window(problems):
-#     ''' prints out the window token returned by tm_dialog to the 
-#     calling TM command (or -1 indicating failure)'''
-#     if not problems['errors']:
-#         print "-1"
-#         return
-#     path = os.path.join(os.path.dirname(sys.argv[0]), "build_errors.nib")
-#     cmd = DIALOG + ' -a "%s"' % path
-#     popen = subprocess.Popen(
-#         cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,shell=True)
-#     out, err = popen.communicate(plistlib.writePlistToString(problems))
-#     print out
-    
-# def update_error_window(window_token, problems):
-#     # if not problems['errors']:
-#     #    close_error_window(window_token)
-#     # else:
-#     cmd = DIALOG + " -t "+window_token
-#     popen = subprocess.Popen(
-#         cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,shell=True)
-#     out, err = popen.communicate(plistlib.writePlistToString(problems))
-
-# def show_markers(problems):
-#     tm = app('TextMate')
-#     tm.clear_marker()
-
-#     filepath = os.environ['TM_FILEPATH']
-#     problems = filter(lambda p: p['filepath']==filepath, problems["errors"])
-#     for p in problems:
-#         tm.add_marker(p['line'])
-
-# def display_problems(problems):
-#     cmd = DIALOG + " -l"
-#     popen = subprocess.Popen(
-#         cmd, stdin=None, stdout=subprocess.PIPE,shell=True)
-#     out, err = popen.communicate()
-#     if JAVA_BUILD_ERRORS_WINDOW in out:
-#         windows = out.splitlines()
-#         for w in windows:
-#             m1 = re.match(r'(\d*) \((.*)\)',w)
-#             if m1.group(2) == JAVA_BUILD_ERRORS_WINDOW:
-#                 token = m1.group(1)
-#         update_error_window(token, problems)
-#     else:
-#         show_error_window(problems)
-    
-#     #show_markers(problems)
-
-if __name__ == '__main__':
-    try:
-        if sys.argv[1] == '--update':
-            project, file = get_context()
-            problems = update_java_src(project, file)
-            #tooltip(problems)
-            refresh_file(project, file)
-            # display_problems(problems_to_dict(problems))
-    except NotInEclipseProjectException, e:
-        # die silently
-        print "-1"
-    except Exception, e:
-        tooltip(str(e))
-        print "-1"

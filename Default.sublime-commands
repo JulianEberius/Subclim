@@ -1,0 +1,18 @@
+[
+    {
+        "caption": "Subclim: Set Eclim executable path",
+        "command": "set_eclim_path"
+    },
+    {
+        "caption": "Subclim: Run current class",
+        "command": "java_run_class"
+    },
+    {
+        "caption": "Subclim: Import class under cursor",
+        "command": "java_import_class_under_cursor"
+    },
+    {
+        "caption": "Subclim: Go to definition",
+        "command": "java_goto_definition"
+    }
+]
