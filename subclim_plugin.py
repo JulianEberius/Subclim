@@ -164,7 +164,9 @@ class JavaCompletions(sublime_plugin.EventListener):
 
         # we need to save the view on every call to completion, or eclipse
         # wont see the changes
-        view.run_command("save")
+        # TODO: find a new solution here. The new as-you-type autocomplete
+        # will crash when save is run on every completion request
+        # view.run_command("save")
 
         project, file = eclim.get_context(view.file_name())
         pos = locations[0]
