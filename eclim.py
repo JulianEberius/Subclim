@@ -11,6 +11,12 @@ directory.
 import os
 import subprocess
 from xml.etree import ElementTree
+try:
+    # ST2 does not always bundle expat (e.g. not on Linux)
+    from xml.parsers import expat
+except ImportError:
+    from elementtree import SimpleXMLTreeBuilder
+    ElementTree.XMLTreeBuilder = SimpleXMLTreeBuilder.TreeBuilder
 
 # points to eclim executable, see module-level comments
 eclim_executable = None
