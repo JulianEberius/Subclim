@@ -7,9 +7,10 @@ There is one global variable 'eclim_executable' that needs to be set before
 using the module. It should point to the "eclim" executable in your Eclipse
 directory.
 '''
-
+import re
 import os
 import subprocess
+from sublime_logging import *
 from xml.etree import ElementTree
 try:
     # ST2 does not always bundle expat (e.g. not on Linux)
@@ -21,14 +22,15 @@ except ImportError:
 # points to eclim executable, see module-level comments
 eclim_executable = None
 
+log = getLogger('subclim')
 
 class NotInEclipseProjectException(Exception):
     pass
 
-
 def call_eclim(cmd):
     ''' Generic call to eclim including error-handling '''
     cmd = "%s %s" % (eclim_executable, cmd)
+    log.debug('run: ' + re.sub("  +", " ", cmd))
     popen = subprocess.Popen(
         cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
     out, err = popen.communicate()
@@ -42,9 +44,9 @@ def call_eclim(cmd):
             error_msg += err
         if "Connection refused" in out:
             error_msg += " Is Eclipse running?"
+        log.error(error_msg)
         raise Exception(error_msg)
     return out
-
 
 def get_context(file_path):
     ''' Given an absolute file_path (e.g. as returned by ST2's
@@ -115,14 +117,21 @@ def get_problems(project):
 def parse_problems(problem_string):
     '''Turns a problem message into a nice dict-representation'''
     results = {"errors": []}
-    for pr in problem_string.split("\n"):
-        if not pr:
-            continue
-        parts = pr.split("|")
-        _file = os.path.split(parts[0])[1]
-        filepath = parts[0]
-        line = parts[1].split(" col ")[0]
-        message = parts[2]
-        results["errors"].append({"file": _file, "line": line,
-                                "message": message, "filepath": filepath})
-    return results
+    try:
+        for pr in problem_string.split("\n"):
+            if not pr:
+                continue
+            print pr
+            parts = pr.split("|")
+            _file = os.path.split(parts[0])[1]
+            filepath = parts[0]
+            line = parts[1].split(" col ")[0]
+            message = parts[2]
+            isError = parts[3] == 'e'
+            results["errors"].append({"file": _file, "line": line,
+                                    "message": message, "filepath": filepath, "error": isError})
+        return results
+    except Exception, e:
+        print e
+        results["errors"].append({"eclim_exception": str(e)})
+        return results

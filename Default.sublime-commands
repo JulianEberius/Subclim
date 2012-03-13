@@ -14,5 +14,9 @@
     {
         "caption": "Subclim: Go to definition",
         "command": "java_goto_definition"
+    },
+    {
+        "caption": "Subclim: Open eclipse project",
+        "command": "eclipse_projects"
     }
 ]

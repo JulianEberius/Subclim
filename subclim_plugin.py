@@ -5,29 +5,31 @@ import sublime
 import eclim
 import re
 import os
+import json
+import logging
+from sublime_logging import *
 
+log = getLogger('subclim')
 
 def display_error(view, error):
-    view.set_status('subclim_error', "SUBCLIM ERROR: %s" % error)
-    # clear error after 5 seconds
-    sublime.set_timeout(
-        lambda: view.erase_status('subclim_error'), 5000)
-
+    log.error(error)
 
 def initialize_eclim_module():
     '''Loads the eclim executable path from ST2's settings and sets it
     in the eclim module'''
     s = sublime.load_settings("Subclim.sublime-settings")
     eclim_executable = s.get("eclim_executable_location", None)
+    log.debug('eclim_executable = ' + eclim_executable)
     eclim.eclim_executable = eclim_executable
+
 # when this module is loaded (by ST2), initialize the eclim module
 initialize_eclim_module()
 
-
 def check_eclim(view):
     if not eclim.eclim_executable:
-        display_error(view, "Eclim executable path not set, call the\
-            set_eclim_path command!")
+        initialize_eclim_module()
+    if not eclim.eclim_executable:
+        log.error("Eclim executable path not set, call the set_eclim_path command!")
         return False
     return True
 
@@ -36,9 +38,14 @@ class SetEclimPath(sublime_plugin.WindowCommand):
     '''Asks the user for the path to the Eclim executable and saves it in
     ST2's prefernces'''
     def run(self):
+        default_path = "/path/to/your/eclipse/eclim"
+        initialize_eclim_module()
+        if eclim.eclim_executable is not None:
+            default_path = eclim.eclim_executable
+
         self.window.show_input_panel(
             "Input path to eclim executable (in your eclipse directory)",
-            "/path/to/your/eclipse/eclim", self.path_entered, None, None)
+            default_path, self.path_entered, None, None)
 
     def path_entered(self, path):
         path = os.path.abspath(os.path.expanduser(path))
@@ -69,7 +76,7 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
 
         # we didnt return correctly, display error in statusbar
         error_msg = "Could not find definition of %s" % self.view.substr(word)
-        display_error(self.view, error_msg)
+        log.error(error_msg)
 
     def call_eclim(self, project, file, offset, ident_len, shell=True):
         eclim.update_java_src(project, file)
@@ -255,17 +262,25 @@ class JavaValidation(sublime_plugin.EventListener):
             l_no = int(e['line'])
             if not line_messages[vid].get(l_no, None):
                 line_messages[vid][l_no] = []
-            line_messages[vid][l_no].append(e['message'])
+            line_messages[vid][l_no].append(e)
         self.visualize(view)
 
     def visualize(self, view):
         view.erase_regions('subclim-errors')
-        lines = JavaValidation.line_messages[view.id()].keys()
+        view.erase_regions('subclim-warnings')
+        lines = JavaValidation.line_messages[view.id()]
 
         outlines = [view.line(view.text_point(lineno - 1, 0))
-                    for lineno in lines]
+                    for lineno in lines.keys()
+                    if len(filter(lambda x: x['error'], lines[lineno])) > 0]
         view.add_regions(
-            'subclim-errors', outlines, 'keyword', JavaValidation.drawType)
+            'subclim-errors', outlines, 'keyword', 'dot', JavaValidation.drawType)
+
+        outlines = [view.line(view.text_point(lineno - 1, 0))
+                    for lineno in lines.keys()
+                    if len(filter(lambda x: x['error'], lines[lineno])) <= 0]
+        view.add_regions(
+            'subclim-warnings', outlines, 'comment', 'dot', JavaValidation.drawType)
 
     def on_selection_modified(self, view):
         if "Java.tmLanguage" in view.settings().get("syntax"):
@@ -274,7 +289,7 @@ class JavaValidation(sublime_plugin.EventListener):
             lineno = view.rowcol(view.sel()[0].end())[0] + 1
             if vid in line_messages and lineno in line_messages[vid]:
                 view.set_status(
-                    'subclim', '; '.join(line_messages[vid][lineno]))
+                    'subclim', '; '.join([ e['message'] for e in line_messages[vid][lineno]]))
             else:
                 view.erase_status('subclim')
 
@@ -339,3 +354,40 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
             last_import_region = package_definition
             import_string = "\n" + import_string
         self.view.insert(edit, last_import_region.b + 1, import_string)
+
+class EclipseProjects(sublime_plugin.WindowCommand):
+    '''Open an eclipse project'''
+    def __init__(self, *args, **kwargs):
+        sublime_plugin.WindowCommand.__init__(self, *args, **kwargs)
+        self.projects = {}
+        self.project_paths = []
+
+    def run(self):
+        if not check_eclim(self.window.active_view()):
+            return
+        self.projects = {}
+        self.project_paths = []
+        cmd = "-command projects"
+        out = eclim.call_eclim(cmd)
+        for line in out.strip().split("\n"):
+            if not line:
+                continue
+            log.debug(line.strip())
+            p = json.loads(line.strip())
+            self.projects[p['name']] = p
+            self.project_paths.append([p['name'],p['path']])
+        self.window.show_quick_panel(self.project_paths, self.on_done)
+
+    def on_done(self, idx):
+        name, path = self.project_paths[idx]
+        branch,leaf = os.path.split(path)
+        # open in finder
+        self.window.run_command("open_dir", {"dir": branch, "file": leaf} )
+        # none of these work.
+        # self.window.open_file(path)
+        # self.window.run_command("prompt_add_folder", {"dir": path} )
+        # self.window.run_command("prompt_add_folder", {"file": path} )
+        # self.window.run_command("prompt_add_folder", path)
+
+
+
