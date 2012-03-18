@@ -159,7 +159,6 @@ class CompletionProposal(object):
             self.insert = name
         self.type = "None"
 
-
 class JavaCompletions(sublime_plugin.EventListener):
     '''Java completion provider'''
 
@@ -168,21 +167,22 @@ class JavaCompletions(sublime_plugin.EventListener):
             return []
         if not check_eclim(view):
             return []
-
-        # we need to save the view on every call to completion, or eclipse
-        # wont see the changes
-        # TODO: find a new solution here. The new as-you-type autocomplete
-        # will crash when save is run on every completion request
-        # view.run_command("save")
-
-        project, file = eclim.get_context(view.file_name())
+        # if we haven't saved yet, push the auto complete to the main thread
+        if view.is_dirty():
+            sublime.set_timeout(lambda: self.queue_completions(view), 1)
+            return []
+        project, fn = eclim.get_context(view.file_name())
         pos = locations[0]
-
-        proposals, with_snippets = self.to_proposals(
-            self.call_eclim(project, file, pos))
-        # if len(proposals) == 1:
-        #     proposals.append(CompletionProposal("dummy"))
+        proposals, with_snippets = self.to_proposals(self.call_eclim(project, fn, pos))
         return [(p.display, p.insert) for p in proposals]
+
+    def queue_completions(self, view):
+        view.run_command("save")        
+        view.run_command('auto_complete', {
+                            'disable_auto_insert': True,
+                            'api_completions_only': True,
+                            'next_completion_if_showing': False,
+                        })
 
     def call_eclim(self, project, file, offset, shell=True):
         eclim.update_java_src(project, file)
@@ -222,7 +222,6 @@ class JavaCompletions(sublime_plugin.EventListener):
                 results.extend(props)
 
         return results, with_snippets
-
 
 class JavaValidation(sublime_plugin.EventListener):
     '''Show Java errors as found by Eclipse on save and load.

@@ -121,7 +121,7 @@ def parse_problems(problem_string):
         for pr in problem_string.split("\n"):
             if not pr:
                 continue
-            print pr
+            log.debug(pr)
             parts = pr.split("|")
             _file = os.path.split(parts[0])[1]
             filepath = parts[0]
@@ -130,8 +130,7 @@ def parse_problems(problem_string):
             isError = parts[3] == 'e'
             results["errors"].append({"file": _file, "line": line,
                                     "message": message, "filepath": filepath, "error": isError})
-        return results
     except Exception, e:
-        print e
+        log.error(e)
         results["errors"].append({"eclim_exception": str(e)})
-        return results
+    return results
