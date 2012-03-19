@@ -1,5 +1,4 @@
 import sublime
-import sublime_plugin
 import string, re, sys, os
 import logging
 
@@ -71,8 +70,7 @@ class ViewLogHandler(logging.Handler):
 	# is there a way to make the edit without forcing the view to activate?
 	def write(self, view, record):
 		# if we don't yet have an active window, then we really can't log the message
-		w = sublime.active_window()
-		if w is None:
+		if sublime.active_window() is None:
 			return
 
 		# if we don't know where we're writing to, find it
@@ -127,32 +125,3 @@ def getLogger(name, flush=False):
 
 	log.setLevel(logging.DEBUG)
 	return log
-
-class TestViewLogHandler(sublime_plugin.TextCommand):
-	def run(self, edit):
-		print 'testing status bar handler'
-		self.test_viewlog()
-	def test_viewlog(self):
-		log = logging.getLogger('test_viewlog2')
-		for h in log.handlers:
-			log.removeHandler(h)
-		handler = ViewLogHandler()
-		handler.setLevel(logging.INFO)
-		log.addHandler(handler)
-		log.debug('Dont see this')
-		log.error('This is an error and stuff')
-
-class TestStatusBarLogHandler(sublime_plugin.TextCommand):
-	def run(self, edit):
-		print 'testing status bar handler'
-		self.test_statusbar()
-	
-	def test_statusbar(self):
-		log = logging.getLogger('test_statusbar')
-		for h in log.handlers:
-			log.removeHandler(h)
-		handler = StatusBarLogHandler('test_statusbar')
-		handler.setLevel(logging.ERROR)
-		log.addHandler(handler)
-		log.debug('Dont see this')
-		log.error('This is an error and stuff')

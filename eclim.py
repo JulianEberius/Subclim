@@ -10,19 +10,12 @@ directory.
 import re
 import os
 import subprocess
-from sublime_logging import *
-from xml.etree import ElementTree
-try:
-    # ST2 does not always bundle expat (e.g. not on Linux)
-    from xml.parsers import expat
-except ImportError:
-    from elementtree import SimpleXMLTreeBuilder
-    ElementTree.XMLTreeBuilder = SimpleXMLTreeBuilder.TreeBuilder
+import sublime_logging
 
 # points to eclim executable, see module-level comments
 eclim_executable = None
 
-log = getLogger('subclim')
+log = sublime_logging.getLogger('subclim')
 
 class NotInEclipseProjectException(Exception):
     pass
@@ -31,8 +24,7 @@ def call_eclim(cmd):
     ''' Generic call to eclim including error-handling '''
     cmd = "%s %s" % (eclim_executable, cmd)
     log.debug('run: ' + re.sub("  +", " ", cmd))
-    popen = subprocess.Popen(
-        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+    popen = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     out, err = popen.communicate()
 
     # error handling
@@ -48,32 +40,27 @@ def call_eclim(cmd):
         raise Exception(error_msg)
     return out
 
-def get_context(file_path):
-    ''' Given an absolute file_path (e.g. as returned by ST2's
-    view.file_path()) it returns the Eclipse project name and file path
-    relative to the project root. It looks for the '.project' file that
-    Eclipse creates to do this.
-    '''
-    project_dir = find_project_dir(file_path)
-    project, file = None, None
+def get_context(filename):
+    project_path = find_project_dir(filename)
+    if not project_path:
+        return None, None
 
-    if project_dir:
-        project_file = os.path.join(project_dir, '.project')
-        if not os.path.isfile(project_file):
-            # if no project file is found, we are not in
-            # an eclipse java project -> die silently
-            raise NotInEclipseProjectException()
-        with open(project_file) as pf:
-            project_desc = ElementTree.XML(pf.read())
-        try:
-            project = project_desc.find('name').text
-            file = os.path.relpath(file_path, project_dir)
-        except Exception, e:
-            raise Exception("Could not parse project file: %s.\nException: %s"
-                % (project_file, e))
+    project_path = os.path.abspath(project_path)
+    cmd = '-command project_list'
+    out = call_eclim(cmd)
+    if not out:
+        return None, None
 
-    return project, file
-
+    for line in out.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        name, state, path = re.split(r'\s+-\s+', line, 2)
+        path = os.path.abspath(path)
+        if path == project_path:
+            relative = os.path.relpath(filename, project_path)
+            return name, relative
+    return None, None
 
 def find_project_dir(file_dir):
     ''' tries to find a '.project' file as created by Eclipse to mark

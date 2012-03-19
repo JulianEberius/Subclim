@@ -7,9 +7,9 @@ import re
 import os
 import json
 import logging
-from sublime_logging import *
+import sublime_logging
 
-log = getLogger('subclim')
+log = sublime_logging.getLogger('subclim')
 
 def display_error(view, error):
     log.error(error)
@@ -19,7 +19,7 @@ def initialize_eclim_module():
     in the eclim module'''
     s = sublime.load_settings("Subclim.sublime-settings")
     eclim_executable = s.get("eclim_executable_location", None)
-    log.debug('eclim_executable = ' + eclim_executable)
+    # log.debug('eclim_executable = ' + eclim_executable)
     eclim.eclim_executable = eclim_executable
 
 # when this module is loaded (by ST2), initialize the eclim module
@@ -33,6 +33,17 @@ def check_eclim(view):
         return False
     return True
 
+def get_context(view):
+    s = view.settings()
+    project = s.get('subclim.project', None)
+    relative_path = s.get('subclim.project_relative_path', None)
+    if project is None:
+        project, relative_path = eclim.get_context(view.file_name())
+        if project is not None:
+            s.set('subclim.project', project)
+        if relative_path is not None:
+            s.set('subclim.project_relative_path', relative_path)
+    return project, relative_path
 
 class SetEclimPath(sublime_plugin.WindowCommand):
     '''Asks the user for the path to the Eclim executable and saves it in
@@ -62,7 +73,7 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
     def run(self, edit, block=False):
         if not check_eclim(self.view):
             return
-        project, file = eclim.get_context(self.view.file_name())
+        project, file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.word(pos)
         locations = self.call_eclim(project, file, word.a, word.size())
@@ -117,9 +128,8 @@ class JavaRunClass(sublime_plugin.TextCommand):
     def run(self, edit, block=False):
         if not check_eclim(self.view):
             return
-        project, file_name = eclim.get_context(self.view.file_name())
-        class_name, _ = os.path.splitext(
-            os.path.basename(file_name))
+        project, file_name = get_context(self.view)
+        class_name, _ = os.path.splitext(os.path.basename(file_name))
         package_name = self.find_package_name()
         if package_name:
             class_name = package_name + "." + class_name
@@ -171,7 +181,7 @@ class JavaCompletions(sublime_plugin.EventListener):
         if view.is_dirty():
             sublime.set_timeout(lambda: self.queue_completions(view), 1)
             return []
-        project, fn = eclim.get_context(view.file_name())
+        project, fn = get_context(view)
         pos = locations[0]
         proposals, with_snippets = self.to_proposals(self.call_eclim(project, fn, pos))
         return [(p.display, p.insert) for p in proposals]
@@ -252,7 +262,7 @@ class JavaValidation(sublime_plugin.EventListener):
         if not check_eclim(view):
             return
         line_messages = JavaValidation.line_messages
-        project, file = eclim.get_context(view.file_name())
+        project, file = get_context(view)
         out = eclim.update_java_src(project, file)
         problems = eclim.parse_problems(out)
         vid = view.id()
@@ -301,7 +311,7 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
     def run(self, edit, block=False):
         if not check_eclim(self.view):
             return
-        project, file = eclim.get_context(self.view.file_name())
+        project, file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.substr(self.view.word(pos))
         class_names = self.call_eclim(project, word)
