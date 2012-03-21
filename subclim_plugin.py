@@ -11,8 +11,113 @@ import sublime_logging
 
 log = sublime_logging.getLogger('subclim')
 
-def display_error(view, error):
-    log.error(error)
+def flatten_command_line(lst):
+    '''shallow flatten for sequences of strings'''
+    return [ i for sub in lst for i in ([sub] if isinstance(sub,basestring) else sub) ]
+
+class UnknownSubclimTemplateHandlerException(Exception):
+    pass
+
+class SubclimBase:
+    def __init__(self, *args, **kwargs):
+        self.template_handler = SubclimBase.DEFAULT_HANDLER.copy()
+
+    def is_configured(self):
+        return check_eclim()
+    
+    def find_view(self, view):
+        if type(view) == sublime.View:
+            return view
+        view = getattr(self, 'view', None)
+        if type(view) == sublime.View:
+            return view
+        window = getattr(self, 'window', None)
+        if type(window) == sublime.Window:
+            return window.active_view()
+        return sublime.active_window().active_view()
+
+    def get_relative_path(self, flag, view):
+        return (flag, get_context(view)[1])
+    
+    def get_project(self, flag, view):
+        return (flag, get_context(view)[0])
+
+    def get_cursor(self, flag, view):
+        return (flag, str(view.sel()[0].a))
+
+    def get_selection_start(self, flag, view):
+        s = view.sel()
+        if len(s) == 1 and s[0].a == s[0].b:
+            return (flag, '0')
+        e = min([ min(i.a, i.b) for i in s])
+        return (flag, str(e))
+
+    def get_selection_end(self, flag, view):
+        s = view.sel()
+        if len(s) == 1 and s[0].a == s[0].b:
+            return (flag, str(view.layout_to_text(view.layout_extent())))
+        e = max([ max(i.a, i.b) for i in s])
+        return (flag, str(e))
+
+    def get_encoding(self, flag, view):
+        return (flag, view.encoding())
+
+    def get_classname(self, flag, view):
+        return (flag, os.path.splitext(view.file_name())[0])
+
+    def build_template(self, template, view=None, **kwargs):
+        view = self.find_view(view)
+        k = template.keys()[0]
+        handler = getattr(self, 'template_handler', SubclimBase.DEFAULT_HANDLER)
+        cmdline = ['-command',k]
+        for param in template[k]:        
+            scrub = param.replace('[','').replace(']','')  
+            if ' ' in scrub:
+                flag, _ = scrub.split(' ',1)
+            else:
+                flag = scrub
+            # ignore optional parameters
+            if param not in handler:
+                if param.startswith('['):
+                    log.warn('ignoring missing optional parameter: %s', param)
+                    continue
+                if flag in kwargs:
+                    continue
+                log.error('error finding paramter: %s', param)
+                raise UnknownSubclimTemplateHandlerException(param)
+            cmdline.append(handler[param](self, flag, view))
+        return cmdline
+
+    def get_additional_args(self, d):
+        '''if we've been passed command line options, add them in'''
+        return [((k, v) if v is not None else k) for k, v in d.items() if k.startswith('-')]
+
+    def run_template(self, template, view=None, **kwargs):
+        cmdline = self.build_template(template, view, **kwargs)
+        cmdline.extend(self.get_additional_args(kwargs))
+        return self.run_eclim(cmdline)
+
+    def run_eclim(self, cmdline):
+        log.info(cmdline)
+        flat = flatten_command_line(cmdline)
+        return eclim.call_eclim(flat)
+
+    # each handler called with self, flag, view
+    DEFAULT_HANDLER = {
+        '-f file' : get_relative_path,
+        '-p project' : get_project,
+        '-o offset' : get_cursor,
+        '-b boffset' : get_selection_start,
+        '-e eoffset' : get_selection_end,
+        '-e encoding' : get_encoding
+        # '-c class' : get_classname
+    }
+
+class EclimCommand(sublime_plugin.TextCommand, SubclimBase):
+    '''To be run from the python console or other nefariousness'''
+    def run(self, edit, **kwargs):
+        cmdline = self.get_additional_args(kwargs)
+        self.run_eclim(cmdline)
 
 def initialize_eclim_module():
     '''Loads the eclim executable path from ST2's settings and sets it
@@ -25,7 +130,7 @@ def initialize_eclim_module():
 # when this module is loaded (by ST2), initialize the eclim module
 initialize_eclim_module()
 
-def check_eclim(view):
+def check_eclim(view=None):
     if not eclim.eclim_executable:
         initialize_eclim_module()
     if not eclim.eclim_executable:
@@ -44,6 +149,14 @@ def get_context(view):
         if relative_path is not None:
             s.set('subclim.project_relative_path', relative_path)
     return project, relative_path
+
+def get_classname(view):
+    s = view.settings()
+    klass = s.get('subclim.classname', None)
+    if klass is None:
+        # todo
+        return None
+    return klass
 
 class SetEclimPath(sublime_plugin.WindowCommand):
     '''Asks the user for the path to the Eclim executable and saves it in
@@ -81,7 +194,7 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
 
         #  one definition was found and it is in a java file -> go there
         if len(locations) == 1:
-            if locations[0]['file'].endswith("java"):
+            if locations[0]['filename'].endswith("java"):
                 self.go_to_location(locations[0])
                 return
 
@@ -89,36 +202,25 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
         error_msg = "Could not find definition of %s" % self.view.substr(word)
         log.error(error_msg)
 
-    def call_eclim(self, project, file, offset, ident_len, shell=True):
-        eclim.update_java_src(project, file)
+    def call_eclim(self, project, filename, offset, ident_len, shell=True):
+        eclim.update_java_src(project, filename)
 
-        go_to_cmd = "-command java_search \
-                                -n %s \
-                                -f %s \
-                                -o %i \
-                                -e utf-8 \
-                                -l %i" % (project, file,
-                                            offset, ident_len)
+        go_to_cmd = ['-command','java_search',
+                        '-n',project,
+                        '-f',filename,
+                        '-o',str(offset),
+                        '-e','utf-8',
+                        '-l',str(ident_len)] 
         out = eclim.call_eclim(go_to_cmd)
         return out
 
     def to_list(self, locations):
-        result = []
-
-        locations = locations.splitlines()
-        for l in locations:
-            parts = l.split("|")
-            l_def = {"file": parts[0],
-                    "line": parts[1].split(" col ")[0],
-                    "col": parts[1].split(" col ")[1]}
-            result.append(l_def)
-        return result
+        return json.loads(locations)
 
     def go_to_location(self, loc):
-        f, l, c = loc['file'], loc['line'], loc['col']
+        f, l, c = loc['filename'], loc['line'], loc['column']
         path = "%s:%s:%s" % (f, l, c)
-        sublime.active_window().open_file(
-            path, sublime.ENCODED_POSITION)
+        sublime.active_window().open_file(path, sublime.ENCODED_POSITION)
 
 
 class JavaRunClass(sublime_plugin.TextCommand):
@@ -151,13 +253,9 @@ class JavaRunClass(sublime_plugin.TextCommand):
 
     def call_eclim(self, project, file_name, class_name):
         eclim.update_java_src(project, file_name)
-
-        go_to_cmd = "-command java \
-                                -p %s \
-                                -c %s" % (project, class_name)
+        go_to_cmd = ['-command','java','-p',project,'-c',class_name]
         out = eclim.call_eclim(go_to_cmd)
         return out
-
 
 class CompletionProposal(object):
     def __init__(self, name, insert=None, type="None"):
@@ -316,7 +414,7 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
         word = self.view.substr(self.view.word(pos))
         class_names = self.call_eclim(project, word)
         if not class_names:
-            display_error(self.view, "No suitable class found!")
+            log.error("No suitable class found!")
             return
         if len(class_names) == 1:
             self.add_import(class_names[0], edit)
@@ -378,11 +476,8 @@ class EclipseProjects(sublime_plugin.WindowCommand):
         self.project_paths = []
         cmd = "-command projects"
         out = eclim.call_eclim(cmd)
-        for line in out.strip().split("\n"):
-            if not line:
-                continue
-            log.debug(line.strip())
-            p = json.loads(line.strip())
+        ps = json.loads(out.strip())
+        for p in ps:  
             self.projects[p['name']] = p
             self.project_paths.append([p['name'],p['path']])
         self.window.show_quick_panel(self.project_paths, self.on_done)
@@ -397,6 +492,3 @@ class EclipseProjects(sublime_plugin.WindowCommand):
         # self.window.run_command("prompt_add_folder", {"dir": path} )
         # self.window.run_command("prompt_add_folder", {"file": path} )
         # self.window.run_command("prompt_add_folder", path)
-
-
-

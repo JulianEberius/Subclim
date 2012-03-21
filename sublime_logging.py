@@ -93,6 +93,8 @@ class ViewLogHandler(logging.Handler):
 		self.view.insert(edit, point, str(display) + "\n")
 		self.view.end_edit(edit)
 		self.view.set_read_only(True)
+		point = self.view.layout_to_text(self.view.layout_extent())
+		self.view.show(point)
 		return
 
 # do the heavy lifting

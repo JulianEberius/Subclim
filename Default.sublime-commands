@@ -18,5 +18,9 @@
     {
         "caption": "Subclim: Open eclipse project",
         "command": "eclipse_projects"
+    },
+    {
+        "caption": "Subclim: Ping",
+        "command": "subclim_core_ping"
     }
 ]
