@@ -429,10 +429,10 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
     def run(self, edit, block=False):
         if not check_eclim(self.view):
             return
-        project, file = get_context(self.view)
+        project, _file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.substr(self.view.word(pos))
-        class_names = self.call_eclim(project, word)
+        class_names = self.call_eclim(project, _file, word)
         if not class_names:
             log.error("No suitable class found!")
             return
@@ -443,15 +443,16 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
             self.possible_imports = class_names
             self.show_import_menu()
 
-    def call_eclim(self, project, identifier):
+    def call_eclim(self, project, _file, identifier):
         self.view.run_command("save")
-        eclim.update_java_src(project, file)
+        eclim.update_java_src(project, _file)
         complete_cmd = "-command java_import \
                                 -n %s \
                                 -p %s" % (project, identifier)
         class_name = eclim.call_eclim(complete_cmd)
+        class_name = json.loads(class_name)
         if class_name:
-            return class_name.strip().split("\n")
+            return class_name
         else:
             return []
 
