@@ -2,6 +2,10 @@ import sublime
 import logging
 
 
+def show_error_msg(msg):
+    sublime.error_message(msg)
+
+
 class StatusBarLogHandler(logging.Handler):
     def __init__(self, key, view=None):
         logging.Handler.__init__(self)

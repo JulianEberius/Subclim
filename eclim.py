@@ -72,12 +72,16 @@ def get_context(filename):
     if not out:
         return None, None
 
-    obj = json.loads(out)
-    for item in obj:
-        path = os.path.abspath(item['path'])
-        if path == project_path:
-            relative = os.path.relpath(filename, project_path)
-            return item['name'], relative
+    try:
+        obj = json.loads(out)
+        for item in obj:
+            path = os.path.abspath(item['path'])
+            if path == project_path:
+                relative = os.path.relpath(filename, project_path)
+                return item['name'], relative
+    except ValueError:
+        subclim_logging.show_error_msg("Could not parse Eclim's response. "
+            "Are you running Eclim version 1.7.3 or greater?")
     return None, None
 
 
