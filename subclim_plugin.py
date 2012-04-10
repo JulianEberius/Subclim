@@ -6,25 +6,27 @@ import eclim
 import re
 import os
 import json
-import logging
-import sublime_logging
+import subclim_logging
 
-log = sublime_logging.getLogger('subclim')
+log = subclim_logging.getLogger('subclim')
+
 
 def flatten_command_line(lst):
     '''shallow flatten for sequences of strings'''
-    return [ i for sub in lst for i in ([sub] if isinstance(sub,basestring) else sub) ]
+    return [i for sub in lst for i in ([sub] if isinstance(sub, basestring) else sub)]
+
 
 class UnknownSubclimTemplateHandlerException(Exception):
     pass
 
-class SubclimBase:
+
+class SubclimBase(object):
     def __init__(self, *args, **kwargs):
         self.template_handler = SubclimBase.DEFAULT_HANDLER.copy()
 
     def is_configured(self):
         return check_eclim()
-    
+
     def find_view(self, view):
         if type(view) == sublime.View:
             return view
@@ -38,7 +40,7 @@ class SubclimBase:
 
     def get_relative_path(self, flag, view):
         return (flag, get_context(view)[1])
-    
+
     def get_project(self, flag, view):
         return (flag, get_context(view)[0])
 
@@ -49,14 +51,14 @@ class SubclimBase:
         s = view.sel()
         if len(s) == 1 and s[0].a == s[0].b:
             return (flag, '0')
-        e = min([ min(i.a, i.b) for i in s])
+        e = min([min(i.a, i.b) for i in s])
         return (flag, str(e))
 
     def get_selection_end(self, flag, view):
         s = view.sel()
         if len(s) == 1 and s[0].a == s[0].b:
             return (flag, str(view.layout_to_text(view.layout_extent())))
-        e = max([ max(i.a, i.b) for i in s])
+        e = max([max(i.a, i.b) for i in s])
         return (flag, str(e))
 
     def get_encoding(self, flag, view):
@@ -69,11 +71,11 @@ class SubclimBase:
         view = self.find_view(view)
         k = template.keys()[0]
         handler = getattr(self, 'template_handler', SubclimBase.DEFAULT_HANDLER)
-        cmdline = ['-command',k]
-        for param in template[k]:        
-            scrub = param.replace('[','').replace(']','')  
+        cmdline = ['-command', k]
+        for param in template[k]:
+            scrub = param.replace('[', '').replace(']', '')
             if ' ' in scrub:
-                flag, _ = scrub.split(' ',1)
+                flag, _ = scrub.split(' ', 1)
             else:
                 flag = scrub
             # ignore optional parameters
@@ -104,20 +106,30 @@ class SubclimBase:
 
     # each handler called with self, flag, view
     DEFAULT_HANDLER = {
-        '-f file' : get_relative_path,
-        '-p project' : get_project,
-        '-o offset' : get_cursor,
-        '-b boffset' : get_selection_start,
-        '-e eoffset' : get_selection_end,
-        '-e encoding' : get_encoding
+        '-f file': get_relative_path,
+        '-p project': get_project,
+        '-o offset': get_cursor,
+        '-b boffset': get_selection_start,
+        '-e eoffset': get_selection_end,
+        '-e encoding': get_encoding
         # '-c class' : get_classname
     }
+
 
 class EclimCommand(sublime_plugin.TextCommand, SubclimBase):
     '''To be run from the python console or other nefariousness'''
     def run(self, edit, **kwargs):
         cmdline = self.get_additional_args(kwargs)
         self.run_eclim(cmdline)
+
+
+def check_eclim_version():
+    out = SubclimBase.run_template({"ping": []}, {})
+    m = re.search(r'^eclim\s+(.*)$', out, re.MULTILINE)
+    version = int("".join(m.group(1).split(".")))
+    if version < 173:
+        sublime.error_message("Subclim depends on Eclim 1.7.3 or higher. Please update your Eclim installation.")
+
 
 def initialize_eclim_module():
     '''Loads the eclim executable path from ST2's settings and sets it
@@ -130,6 +142,7 @@ def initialize_eclim_module():
 # when this module is loaded (by ST2), initialize the eclim module
 initialize_eclim_module()
 
+
 def check_eclim(view=None):
     if not eclim.eclim_executable:
         initialize_eclim_module()
@@ -137,6 +150,7 @@ def check_eclim(view=None):
         log.error("Eclim executable path not set, call the set_eclim_path command!")
         return False
     return True
+
 
 def get_context(view):
     s = view.settings()
@@ -150,6 +164,7 @@ def get_context(view):
             s.set('subclim.project_relative_path', relative_path)
     return project, relative_path
 
+
 def get_classname(view):
     s = view.settings()
     klass = s.get('subclim.classname', None)
@@ -157,6 +172,7 @@ def get_classname(view):
         # todo
         return None
     return klass
+
 
 class SetEclimPath(sublime_plugin.WindowCommand):
     '''Asks the user for the path to the Eclim executable and saves it in
@@ -205,12 +221,12 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
     def call_eclim(self, project, filename, offset, ident_len, shell=True):
         eclim.update_java_src(project, filename)
 
-        go_to_cmd = ['-command','java_search',
-                        '-n',project,
-                        '-f',filename,
-                        '-o',str(offset),
-                        '-e','utf-8',
-                        '-l',str(ident_len)] 
+        go_to_cmd = ['-command', 'java_search',
+                        '-n', project,
+                        '-f', filename,
+                        '-o', str(offset),
+                        '-e', 'utf-8',
+                        '-l', str(ident_len)]
         out = eclim.call_eclim(go_to_cmd)
         return out
 
@@ -253,19 +269,25 @@ class JavaRunClass(sublime_plugin.TextCommand):
 
     def call_eclim(self, project, file_name, class_name):
         eclim.update_java_src(project, file_name)
-        go_to_cmd = ['-command','java','-p',project,'-c',class_name]
+        go_to_cmd = ['-command', 'java', '-p', project, '-c', class_name]
         out = eclim.call_eclim(go_to_cmd)
         return out
 
+
 class CompletionProposal(object):
     def __init__(self, name, insert=None, type="None"):
-        self.name = name
-        self.display = name
+        split = name.split(" ")
+        self.name = "%s\t%s" % (split[0], " ".join(split[1:]))
+        self.display = self.name
         if insert:
             self.insert = insert
         else:
             self.insert = name
         self.type = "None"
+
+    def __repr__(self):
+        return "CompletionProposal: %s %s" % (self.name, self.insert)
+
 
 class JavaCompletions(sublime_plugin.EventListener):
     '''Java completion provider'''
@@ -277,15 +299,15 @@ class JavaCompletions(sublime_plugin.EventListener):
             return []
         # if we haven't saved yet, push the auto complete to the main thread
         if view.is_dirty():
-            sublime.set_timeout(lambda: self.queue_completions(view), 1)
+            sublime.set_timeout(lambda: self.queue_completions(view), 0)
             return []
         project, fn = get_context(view)
         pos = locations[0]
-        proposals, with_snippets = self.to_proposals(self.call_eclim(project, fn, pos))
+        proposals = self.to_proposals(self.call_eclim(project, fn, pos))
         return [(p.display, p.insert) for p in proposals]
 
     def queue_completions(self, view):
-        view.run_command("save")        
+        view.run_command("save")
         view.run_command('auto_complete', {
                             'disable_auto_insert': True,
                             'api_completions_only': True,
@@ -304,32 +326,30 @@ class JavaCompletions(sublime_plugin.EventListener):
         return out
 
     def to_proposals(self, eclim_output):
-        results = []
-        with_snippets = False
-        for l in eclim_output.split("\n"):
-            if not l:
-                continue
-            parts = l.split("|")
-
-            if parts[1]:
-                prop = CompletionProposal(parts[1])
-                results.append(prop)
+        proposals = []
+        completions = json.loads(eclim_output)
+        for c in completions:
+            if not "<br/>" in c['info']:  # no overloads
+                proposals.append(CompletionProposal(c['info'], c['completion']))
             else:
-                variants = parts[3].split("<br/>")
-                param_lists = [re.search(r'\((.*)\)', v).group(1)
-                                    for v in variants]
+                variants = c['info'].split("<br/>")
+                param_lists = [re.search(r'\((.*)\)', v) for v in variants]
+                param_lists = [x.group(1) for x in param_lists if x]
                 props = []
                 for idx, pl in enumerate(param_lists):
-                    params = [par.split(" ")[-1] for par in pl.split(", ")]
-                    insert = ", ".join(["${%i:%s}" % (i, s)
-                                        for i, s in
-                                        zip(range(1, len(params) + 1), params)
-                                        ])
-                    props.append(CompletionProposal(variants[idx], insert))
-                    with_snippets = True
-                results.extend(props)
+                    if pl:
+                        params = [par.split(" ")[-1] for par in pl.split(", ")]
+                        insert = ", ".join(["${%i:%s}" % (i, s)
+                                            for i, s in
+                                            zip(range(1, len(params) + 1), params)
+                                            ])
+                        insert = c['completion'] + insert + ")"
+                        props.append(CompletionProposal(variants[idx], insert))
+                    else:
+                        props.append(CompletionProposal(variants[idx], c['completion']))
+                proposals.extend(props)
+        return proposals
 
-        return results, with_snippets
 
 class JavaValidation(sublime_plugin.EventListener):
     '''Show Java errors as found by Eclipse on save and load.
@@ -396,7 +416,7 @@ class JavaValidation(sublime_plugin.EventListener):
             lineno = view.rowcol(view.sel()[0].end())[0] + 1
             if vid in line_messages and lineno in line_messages[vid]:
                 view.set_status(
-                    'subclim', '; '.join([ e['message'] for e in line_messages[vid][lineno]]))
+                    'subclim', '; '.join([e['message'] for e in line_messages[vid][lineno]]))
             else:
                 view.erase_status('subclim')
 
@@ -462,6 +482,7 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
             import_string = "\n" + import_string
         self.view.insert(edit, last_import_region.b + 1, import_string)
 
+
 class EclipseProjects(sublime_plugin.WindowCommand):
     '''Open an eclipse project'''
     def __init__(self, *args, **kwargs):
@@ -477,16 +498,16 @@ class EclipseProjects(sublime_plugin.WindowCommand):
         cmd = "-command projects"
         out = eclim.call_eclim(cmd)
         ps = json.loads(out.strip())
-        for p in ps:  
+        for p in ps:
             self.projects[p['name']] = p
-            self.project_paths.append([p['name'],p['path']])
+            self.project_paths.append([p['name'], p['path']])
         self.window.show_quick_panel(self.project_paths, self.on_done)
 
     def on_done(self, idx):
         name, path = self.project_paths[idx]
-        branch,leaf = os.path.split(path)
+        branch, leaf = os.path.split(path)
         # open in finder
-        self.window.run_command("open_dir", {"dir": branch, "file": leaf} )
+        self.window.run_command("open_dir", {"dir": branch, "file": leaf})
         # none of these work.
         # self.window.open_file(path)
         # self.window.run_command("prompt_add_folder", {"dir": path} )

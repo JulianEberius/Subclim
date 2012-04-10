@@ -7,35 +7,37 @@ There is one global variable 'eclim_executable' that needs to be set before
 using the module. It should point to the "eclim" executable in your Eclipse
 directory.
 '''
-import re
 import os
 import json
 import subprocess
-import sublime_logging
+import subclim_logging
 
 # points to eclim executable, see module-level comments
 eclim_executable = None
 
-log = sublime_logging.getLogger('subclim')
+log = subclim_logging.getLogger('subclim')
+
 
 class NotInEclipseProjectException(Exception):
     pass
+
 
 def call_eclim(cmdline):
     ''' Generic call to eclim including error-handling '''
     def arg_string(s):
         return "%s %s" % (eclim_executable, s)
+
     def arg_seq(args):
         a = [eclim_executable]
         a.extend(args)
         return a
-    
+
     cmd = None
     shell = None
     if isinstance(cmdline, basestring):
         cmd = arg_string(cmdline)
         shell = True
-    elif hasattr(cmdline,'__iter__'):
+    elif hasattr(cmdline, '__iter__'):
         cmd = arg_seq(cmdline)
         shell = False
     else:
@@ -58,6 +60,7 @@ def call_eclim(cmdline):
         raise Exception(error_msg)
     return out
 
+
 def get_context(filename):
     project_path = find_project_dir(filename)
     if not project_path:
@@ -76,6 +79,7 @@ def get_context(filename):
             relative = os.path.relpath(filename, project_path)
             return item['name'], relative
     return None, None
+
 
 def find_project_dir(file_dir):
     ''' tries to find a '.project' file as created by Eclipse to mark
@@ -100,14 +104,14 @@ def find_project_dir(file_dir):
 def update_java_src(project, filename):
     '''Updates Eclipse's status regarding the given file.
     I have forgotten what it actually does ;-)'''
-    update_cmd = ['-command','java_src_update','-p',project,'-f',filename,'-v']
+    update_cmd = ['-command', 'java_src_update', '-p', project, '-f', filename, '-v']
     out = call_eclim(update_cmd)
     return out
 
 
 def get_problems(project):
     ''' returns a list of problems that Eclipse found in the given project'''
-    get_problems_cmd = ['-command','problems','-p',project]
+    get_problems_cmd = ['-command', 'problems', '-p', project]
     out = call_eclim(get_problems_cmd)
     return out
 
