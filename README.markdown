@@ -10,6 +10,8 @@ Installation
 Just add the plugin to your Sublime Text packages directory as usual.
 Additionally, install Eclim from eclim.org. Then, in Sublime Text run the command set_eclim_path
 via the command palette to tell ST2 where to find eclim.
+*Important*: This plugin is only compatible with Eclim version 1.7.3 or greater.
+*Important 2*: I would recommend to disable ST2's "as-you-type" completion when working with Subclim (setting "auto_complete" to false). For bigger projects, the Eclim completions can not keep up and might mess up your typing. Just find out whether it works for you.
 
 Usage
 -----
@@ -26,3 +28,5 @@ In addition to completions, the following commands are supported at the moment:
 - Go to definition
 - Import class under cursor
 - Run current class as Java application
+
+Most other Eclim commands might be available too, but are not supported. Check generated.py and set keybindings for the commands there if you are feeling adventurous.
