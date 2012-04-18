@@ -62,7 +62,10 @@ class SubclimBase(object):
         return (flag, str(e))
 
     def get_encoding(self, flag, view):
-        return (flag, view.encoding())
+        enc = view.encoding()
+        if enc == "Undefined":
+            enc = "utf-8"
+        return (flag, enc)
 
     def get_classname(self, flag, view):
         return (flag, os.path.splitext(view.file_name())[0])
@@ -364,7 +367,17 @@ class JavaValidation(sublime_plugin.EventListener):
 
     def on_load(self, view):
         if "Java.tmLanguage" in view.settings().get("syntax"):
-            self.validate(view)
+            buf_id = view.buffer_id()
+
+            def validation_closure():
+                try:
+                    v = sublime.active_window().active_view()
+                except AttributeError:
+                    pass
+                if v.buffer_id() == buf_id:
+                    self.validate(view)
+
+            sublime.set_timeout(validation_closure, 1500)
 
     def on_post_save(self, view):
         if "Java.tmLanguage" in view.settings().get("syntax"):
