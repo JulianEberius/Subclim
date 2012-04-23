@@ -4,6 +4,9 @@ Subclim
 This plugin integrates Sublime Text 2 with Eclipse via Eclim http://eclim.org/.
 At the moment it adds Java completions, auto-import, goto-definition and compilation/validation (error highlighting).
 
+**New**: It is possible to get Scala validation and completions, but you will need to install
+the scala-ide branch of Eclim manually (clone their repo, checkout scala-ide and build with Ant as described there).
+
 Installation
 -----------
 
@@ -19,7 +22,7 @@ Usage
 -----
 
 Either run Eclipse and open the Eclim View, or run eclimd from a console.
-I recommend the first way,as you still need Eclipse for project management tasks. While you are coding, you can just keep Eclipse minimized, as long as the Eclim View has been opened.
+I recommend the first way, as you still need Eclipse for project management tasks. While you are coding, you can just keep Eclipse minimized, as long as the Eclim View has been opened.
 
 The plugin will only work when editing files inside an open Eclipse project.
 The very first command or completion on startup can take very long. Subsequent ones will be quicker.
@@ -28,6 +31,7 @@ For keybindings see the keymaps in the plugin's directory (or the command palett
 In addition to completions, the following commands are supported at the moment:
 
 - Go to definition
+- Go to usages
 - Import class under cursor
 - Run current class as Java application
 
