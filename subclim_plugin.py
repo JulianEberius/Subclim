@@ -199,6 +199,17 @@ class SetEclimPath(sublime_plugin.WindowCommand):
         initialize_eclim_module()
 
 
+class SubclimGoBack(sublime_plugin.TextCommand):
+
+    navigation_stack = []
+
+    def run(self, edit, block=False):
+        if len(SubclimGoBack.navigation_stack) > 0:
+            self.view.window().open_file(
+                SubclimGoBack.navigation_stack.pop(),
+                sublime.ENCODED_POSITION)
+
+
 class JavaGotoDefinition(sublime_plugin.TextCommand):
     '''Asks Eclipse for the definition location and moves ST2 there if found'''
 
@@ -237,6 +248,12 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
         return json.loads(locations)
 
     def go_to_location(self, loc):
+        # save current position
+        row, col = self.view.rowcol(self.view.sel()[0].a)
+        SubclimGoBack.navigation_stack.append("%s:%d:%d" % (
+            self.view.file_name(), row + 1, col + 1))
+
+        # go to new position
         f, l, c = loc['filename'], loc['line'], loc['column']
         path = "%s:%s:%s" % (f, l, c)
         sublime.active_window().open_file(path, sublime.ENCODED_POSITION)
@@ -426,7 +443,7 @@ class JavaValidation(sublime_plugin.EventListener):
         sublime_plugin.EventListener.__init__(self, *args, **kwargs)
         self.lastCount = {}
 
-    def validation_func(view):
+    def validation_func(self, view):
         syntax = view.settings().get("syntax")
         if "Java.tmLanguage" in syntax:
             return eclim.update_java_src

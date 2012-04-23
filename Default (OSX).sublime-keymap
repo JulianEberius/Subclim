@@ -9,6 +9,11 @@
             { "key": "selector", "operator": "equal", "operand": "source.java" }
         ]
     },
+    { "keys": ["super+f2"], "command": "subclim_go_back", "context":
+        [
+            { "key": "selector", "operator": "equal", "operand": "source.java" }
+        ]
+    },
     { "keys": ["super+alt+i"], "command": "java_import_class_under_cursor", "context":
         [
             { "key": "selector", "operator": "equal", "operand": "source.java" }
