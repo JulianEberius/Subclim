@@ -106,9 +106,15 @@ def find_project_dir(file_dir):
 
 
 def update_java_src(project, filename):
-    '''Updates Eclipse's status regarding the given file.
-    I have forgotten what it actually does ;-)'''
+    '''Updates Eclipse's status regarding the given file.'''
     update_cmd = ['-command', 'java_src_update', '-p', project, '-f', filename, '-v']
+    out = call_eclim(update_cmd)
+    return out
+
+
+def update_scala_src(project, filename):
+    '''Updates Eclipse's status regarding the given file.'''
+    update_cmd = ['-command', 'scala_src_update', '-p', project, '-f', filename, '-v']
     out = call_eclim(update_cmd)
     return out
 

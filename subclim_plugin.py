@@ -333,10 +333,11 @@ class CompletionProposal(object):
 
 
 class JavaCompletions(sublime_plugin.EventListener):
-    '''Java completion provider'''
+    '''Java/Scala completion provider'''
 
     def on_query_completions(self, view, prefix, locations):
-        if not view.match_selector(locations[0], "source.java"):
+        c_func = self.complete_func(view)
+        if not c_func:
             return []
         if not check_eclim(view):
             return []
@@ -346,7 +347,7 @@ class JavaCompletions(sublime_plugin.EventListener):
             return []
         project, fn = get_context(view)
         pos = locations[0]
-        proposals = self.to_proposals(self.call_eclim(project, fn, pos))
+        proposals = self.to_proposals(c_func(project, fn, pos))
         return [(p.display, p.insert) for p in proposals]
 
     def queue_completions(self, view):
@@ -357,9 +358,29 @@ class JavaCompletions(sublime_plugin.EventListener):
                             'next_completion_if_showing': False,
                         })
 
-    def call_eclim(self, project, file, offset, shell=True):
+    def complete_func(self, view):
+        syntax = view.settings().get("syntax")
+        if "Java.tmLanguage" in syntax:
+            return self.call_eclim_java
+        elif "Scala.tmLanguage" in syntax:
+            return self.call_eclim_scala
+        else:
+            return None
+
+    def call_eclim_java(self, project, file, offset, shell=True):
         eclim.update_java_src(project, file)
         complete_cmd = "-command java_complete \
+                                -p %s \
+                                -f %s \
+                                -o %i \
+                                -e utf-8 \
+                                -l compact" % (project, file, offset)
+        out = eclim.call_eclim(complete_cmd)
+        return out
+
+    def call_eclim_scala(self, project, file, offset, shell=True):
+        eclim.update_scala_src(project, file)
+        complete_cmd = "-command scala_complete \
                                 -p %s \
                                 -f %s \
                                 -o %i \
@@ -405,8 +426,18 @@ class JavaValidation(sublime_plugin.EventListener):
         sublime_plugin.EventListener.__init__(self, *args, **kwargs)
         self.lastCount = {}
 
+    def validation_func(view):
+        syntax = view.settings().get("syntax")
+        if "Java.tmLanguage" in syntax:
+            return eclim.update_java_src
+        elif "Scala.tmLanguage" in syntax:
+            return eclim.update_scala_src
+        else:
+            return None
+
     def on_load(self, view):
-        if "Java.tmLanguage" in view.settings().get("syntax"):
+        validation_func = self.validation_func(view)
+        if validation_func:
             buf_id = view.buffer_id()
 
             def validation_closure():
@@ -415,26 +446,27 @@ class JavaValidation(sublime_plugin.EventListener):
                 except AttributeError:
                     pass
                 if v.buffer_id() == buf_id:
-                    self.validate(view)
+                    self.validate(view, validation_func)
 
             sublime.set_timeout(validation_closure, 1500)
 
     def on_post_save(self, view):
-        if "Java.tmLanguage" in view.settings().get("syntax"):
-            self.validate(view)
+        validation_func = self.validation_func(view)
+        if validation_func:
+            self.validate(view, validation_func)
 
             # sometimes, Eclipse will not report errors instantly
             # check again a bit later
             def validation_closure():
-                self.validate(view)
+                self.validate(view, validation_func)
             sublime.set_timeout(validation_closure, 1500)
 
-    def validate(self, view):
+    def validate(self, view, validation_func):
         if not check_eclim(view):
             return
         line_messages = JavaValidation.line_messages
         project, file = get_context(view)
-        out = eclim.update_java_src(project, file)
+        out = validation_func(project, file)
         problems = eclim.parse_problems(out)
         vid = view.id()
         line_messages[vid] = {}
@@ -463,7 +495,8 @@ class JavaValidation(sublime_plugin.EventListener):
             'subclim-warnings', outlines, 'comment', 'dot', JavaValidation.drawType)
 
     def on_selection_modified(self, view):
-        if "Java.tmLanguage" in view.settings().get("syntax"):
+        validation_func = self.validation_func(view)
+        if validation_func:
             line_messages = JavaValidation.line_messages
             vid = view.id()
             lineno = view.rowcol(view.sel()[0].end())[0] + 1
