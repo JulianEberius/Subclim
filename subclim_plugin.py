@@ -242,6 +242,46 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
         sublime.active_window().open_file(path, sublime.ENCODED_POSITION)
 
 
+class JavaGotoUsages(JavaGotoDefinition):
+    '''Asks Eclipse for the usage locations and moves ST2 there if found'''
+    def run(self, edit, block=False):
+        if not check_eclim(self.view):
+            return
+        project, file = get_context(self.view)
+        pos = self.view.sel()[0]
+        word = self.view.word(pos)
+        locations = self.call_eclim(project, file, word.a, word.size())
+        locations = self.to_list(locations)
+
+        if len(locations) == 1:
+            #  one definition was found and it is in a java file -> go there
+            if locations[0]['filename'].endswith("java"):
+                self.go_to_location(locations[0])
+                return
+        else:
+            #  multiple usages -> show menu
+            self.locations = locations
+            self.view.window().show_quick_panel(
+                [l['message'] for l in self.locations],
+                self.location_selected, sublime.MONOSPACE_FONT)
+
+    def location_selected(self, selected_idx):
+        self.go_to_location(self.locations[selected_idx])
+
+    def call_eclim(self, project, filename, offset, ident_len, shell=True):
+        eclim.update_java_src(project, filename)
+
+        go_to_cmd = ['-command', 'java_search',
+                        '-n', project,
+                        '-f', filename,
+                        '-o', str(offset),
+                        '-e', 'utf-8',
+                        '-l', str(ident_len),
+                        '-x', 'references']
+        out = eclim.call_eclim(go_to_cmd)
+        return out
+
+
 class JavaRunClass(sublime_plugin.TextCommand):
     '''Runs the current class as Java program, good for testing
     small Java-"Scripts"'''
