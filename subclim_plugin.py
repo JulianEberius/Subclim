@@ -6,9 +6,36 @@ import eclim
 import re
 import os
 import json
+import Queue
+import threading
 import subclim_logging
 
 log = subclim_logging.getLogger('subclim')
+settings = sublime.load_settings("Subclim.sublime-settings")
+auto_complete = settings.get("subclim_auto_complete", True)
+
+
+def auto_complete_changed():
+    global auto_complete
+    auto_complete = settings.get("subclim_auto_complete", True)
+settings.add_on_change("subclim_auto_complete", auto_complete_changed)
+
+
+# worker thread for async tasks
+def worker():
+    while True:
+        task = tasks.get()
+        try:
+            task()
+        except:
+            import traceback
+            traceback.print_exc()
+        finally:
+            tasks.task_done()
+tasks = Queue.Queue()
+t = threading.Thread(target=worker)
+t.daemon = True
+t.start()
 
 
 def flatten_command_line(lst):
@@ -349,10 +376,29 @@ class CompletionProposal(object):
         return "CompletionProposal: %s %s" % (self.name, self.insert)
 
 
+class ManualCompletionRequest(sublime_plugin.TextCommand):
+    '''Used to request a full Eclim autocompletion when
+    auto_complete is turned off'''
+    def run(self, edit, block=False):
+        JavaCompletions.user_requested = True
+        self.view.run_command("save")
+        self.view.run_command('auto_complete', {
+                            'disable_auto_insert': True,
+                            'api_completions_only': True,
+                            'next_completion_if_showing': False,
+                        })
+
+
 class JavaCompletions(sublime_plugin.EventListener):
     '''Java/Scala completion provider'''
+    # set when the just requested a manual completion, else False
+    user_requested = False
 
     def on_query_completions(self, view, prefix, locations):
+        if not (auto_complete or JavaCompletions.user_requested):
+            return []
+        JavaCompletions.user_requested = False
+
         c_func = self.complete_func(view)
         if not c_func:
             return []
@@ -481,18 +527,26 @@ class JavaValidation(sublime_plugin.EventListener):
     def validate(self, view, validation_func):
         if not check_eclim(view):
             return
-        line_messages = JavaValidation.line_messages
         project, file = get_context(view)
-        out = validation_func(project, file)
-        problems = eclim.parse_problems(out)
-        vid = view.id()
-        line_messages[vid] = {}
-        for e in problems['errors']:
-            l_no = int(e['line'])
-            if not line_messages[vid].get(l_no, None):
-                line_messages[vid][l_no] = []
-            line_messages[vid][l_no].append(e)
-        self.visualize(view)
+        problems = {}
+
+        def async_validate_task():
+            out = validation_func(project, file)
+            problems.update(eclim.parse_problems(out))
+            sublime.set_timeout(on_validation_finished, 0)
+
+        def on_validation_finished():
+            line_messages = JavaValidation.line_messages
+            vid = view.id()
+            line_messages[vid] = {}
+            for e in problems['errors']:
+                l_no = int(e['line'])
+                if not line_messages[vid].get(l_no, None):
+                    line_messages[vid][l_no] = []
+                line_messages[vid][l_no].append(e)
+            self.visualize(view)
+
+        tasks.put(async_validate_task)
 
     def visualize(self, view):
         view.erase_regions('subclim-errors')
@@ -535,19 +589,28 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
         project, _file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.substr(self.view.word(pos))
-        class_names = self.call_eclim(project, _file, word)
-        if not class_names:
-            log.error("No suitable class found!")
-            return
-        if len(class_names) == 1:
-            self.add_import(class_names[0], edit)
-        else:
-            self.edit = edit
-            self.possible_imports = class_names
-            self.show_import_menu()
+        self.view.run_command("save")
+
+        class_names = []
+
+        def async_find_imports_task():
+            class_names.extend(self.call_eclim(project, _file, word))
+            sublime.set_timeout(on_find_imports_finished, 0)
+
+        def on_find_imports_finished():
+            if not class_names:
+                log.error("No suitable class found!")
+                return
+            if len(class_names) == 1:
+                self.add_import(class_names[0], edit)
+            else:
+                self.edit = edit
+                self.possible_imports = class_names
+                self.show_import_menu()
+
+        tasks.put(async_find_imports_task)
 
     def call_eclim(self, project, _file, identifier):
-        self.view.run_command("save")
         eclim.update_java_src(project, _file)
         complete_cmd = "-command java_import \
                                 -n %s \

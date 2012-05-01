@@ -9,7 +9,7 @@
             { "key": "selector", "operator": "equal", "operand": "source.java" }
         ]
     },
-    { "keys": ["ctrl+f2"], "command": "subclim_go_back", "context":
+    { "keys": ["ctrl+f5"], "command": "subclim_go_back", "context":
         [
             { "key": "selector", "operator": "equal", "operand": "source.java" }
         ]
@@ -19,9 +19,24 @@
             { "key": "selector", "operator": "equal", "operand": "source.java" }
         ]
     },
+    { "keys": ["super+alt+i"], "command": "java_import_class_under_cursor" , "context":
+        [
+            { "key": "selector", "operator": "equal", "operand": "source.scala" }
+        ]
+    },
     { "keys": ["shift+ctrl+r"], "command": "java_run_class", "context":
         [
             { "key": "selector", "operator": "equal", "operand": "source.java" }
+        ]
+    },
+    { "keys": ["ctrl+alt+space"], "command": "manual_completion_request", "context":
+        [
+            { "key": "selector", "operator": "equal", "operand": "source.java" }
+        ]
+    },
+    { "keys": ["ctrl+alt+space"], "command": "manual_completion_request", "context":
+        [
+            { "key": "selector", "operator": "equal", "operand": "source.scala" }
         ]
     }
 ]

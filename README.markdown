@@ -4,8 +4,10 @@ Subclim
 This plugin integrates Sublime Text 2 with Eclipse via Eclim http://eclim.org/.
 At the moment it adds Java completions, auto-import, goto-definition, goto-usages and compilation/validation (error highlighting).
 
-**New**: It is possible to get Scala validation and completions, but you will need to install
-the scala-ide branch of Eclim manually (clone their repo, checkout scala-ide and build with Ant as described there).
+**New**: It is possible to get Scala validation and completions, but you will need to install the scala-ide branch of Eclim manually (clone their repo, checkout scala-ide and build with Ant as described there).
+
+**Also New**: Subclim will not automatically provide completions by default, but only on
+manual request (ctrl+alt+space). There is an option "subclim_auto_complete" to turn the old behaviour back on. As the Eclim completions are quite slow, I find it much more efficient to use ST2 native buffer-based completion 90% of the time, and manually trigger the Eclim-completions when I really need them. Your mileage may vary.
 
 Installation
 -----------
@@ -16,16 +18,14 @@ via the command palette to tell ST2 where to find eclim.
 
 **Important**: This plugin is only compatible with Eclim version 1.7.3 or greater.
 
-**Also Important**: I would recommend to disable ST2's "as-you-type" completion when working with Subclim (setting "auto_complete" to false). For bigger projects, the Eclim completions can not keep up and might mess up your typing. Just find out whether it works for you.
-
 Usage
 -----
 
 Either run Eclipse and open the Eclim View, or run eclimd from a console.
 I recommend the first way, as you still need Eclipse for project management tasks. While you are coding, you can just keep Eclipse minimized, as long as the Eclim View has been opened.
 
-The plugin will only work when editing files inside an open Eclipse project.
-The very first command or completion on startup can take very long. Subsequent ones will be quicker.
+The plugin will only work when editing files inside an open Eclipse project. Compilation/validation will be done asynchronously on load and save, to keep editing fluent, so errors may not appear instantly, but after a few seconds.
+The very first command or completion on startup can take very long. Subsequent ones will be quicker. Completions are not automatically triggered with ST2 normal completions, but manually with ctrl+alt+space. You can change this behaviour in the settings ("subclim_auto_complete").
 
 To see the available commands and their keybindings, just use the command pallete and
 enter "Subclim".

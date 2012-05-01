@@ -22,6 +22,10 @@
     {
         "caption": "Subclim: Go to Usages",
         "command": "java_goto_usages"
+    },
+    {
+        "caption": "Subclim: Request completions",
+        "command": "manual_completion_request"
     }
 
 ]
