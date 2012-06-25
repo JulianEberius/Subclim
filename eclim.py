@@ -17,10 +17,11 @@ eclim_executable = None
 
 log = subclim_logging.getLogger('subclim')
 
+class EclimExecutionException(Exception):
+    pass
 
 class NotInEclipseProjectException(Exception):
     pass
-
 
 def call_eclim(cmdline):
     ''' Generic call to eclim including error-handling '''
@@ -41,9 +42,18 @@ def call_eclim(cmdline):
         cmd = arg_seq(cmdline)
         shell = False
     else:
-        raise Exception('dude.' + str(cmd) + str(type(cmd)))
+        raise EclimExecutionException('Unknown command line passed. ' + repr(cmd) + ' ' + (type(cmd)))
     log.info('Run: %s', cmd)
-    popen = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell)
+    
+    # running with shell=False spawns new command windows for
+    # each execution of eclim_executable
+    sinfo = None
+    if os.name == 'nt' and not shell:
+        sinfo = subprocess.STARTUPINFO()
+        sinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        sinfo.wShowWindow = subprocess.SW_HIDE
+    
+    popen = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell, startupinfo=sinfo)
     out, err = popen.communicate()
     log.debug("Results:\n" + out)
 
@@ -57,9 +67,8 @@ def call_eclim(cmdline):
         if "Connection refused" in out:
             error_msg += " Is Eclipse running?"
         log.error(error_msg)
-        raise Exception(error_msg)
+        raise EclimExecutionException(error_msg)
     return out
-
 
 def get_context(filename):
     project_path = find_project_dir(filename)
