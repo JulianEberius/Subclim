@@ -454,7 +454,7 @@ class JavaCompletions(sublime_plugin.EventListener):
 
     def to_proposals(self, eclim_output):
         proposals = []
-        completions = json.loads(eclim_output)
+        completions = json.loads(eclim_output)["completions"]
         for c in completions:
             if not "<br/>" in c['info']:  # no overloads
                 proposals.append(CompletionProposal(c['info'], c['completion']))
