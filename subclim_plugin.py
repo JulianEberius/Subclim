@@ -2,13 +2,21 @@
 Enables Java completions / go to definition etc'''
 import sublime_plugin
 import sublime
-import eclim
 import re
 import os
 import json
-import Queue
 import threading
-import subclim_logging
+
+try:
+    # Python 3
+    from . import eclim
+    from . import subclim_logging
+    import queue
+except (ValueError):
+    # Python 2
+    import eclim
+    import subclim_logging
+    import Queue as queue
 
 log = subclim_logging.getLogger('subclim')
 settings = sublime.load_settings("Subclim.sublime-settings")
@@ -32,7 +40,7 @@ def worker():
             traceback.print_exc()
         finally:
             tasks.task_done()
-tasks = Queue.Queue()
+tasks = queue.Queue()
 t = threading.Thread(target=worker)
 t.daemon = True
 t.start()
@@ -340,7 +348,7 @@ class JavaRunClass(sublime_plugin.TextCommand):
             class_name = package_name + "." + class_name
         result = self.call_eclim(project, file_name, class_name)
         # print stdout of Java program to ST2's console
-        print result
+        print(result)
 
     def find_package_name(self):
         '''Searches the current file line by line for the
@@ -559,13 +567,13 @@ class JavaValidation(sublime_plugin.EventListener):
 
         outlines = [view.line(view.text_point(lineno - 1, 0))
                     for lineno in lines.keys()
-                    if len(filter(lambda x: x['error'], lines[lineno])) > 0]
+                    if len(list(filter(lambda x: x['error'], lines[lineno]))) > 0]
         view.add_regions(
             'subclim-errors', outlines, 'keyword', 'dot', JavaValidation.drawType)
 
         outlines = [view.line(view.text_point(lineno - 1, 0))
                     for lineno in lines.keys()
-                    if len(filter(lambda x: x['error'], lines[lineno])) <= 0]
+                    if len(list(filter(lambda x: x['error'], lines[lineno]))) <= 0]
         view.add_regions(
             'subclim-warnings', outlines, 'comment', 'dot', JavaValidation.drawType)
 

@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 import sublime_plugin
-import subclim_logging
-from subclim_plugin import SubclimBase
+try:
+    # Python 3
+    from . import subclim_logging
+    from .subclim_plugin import SubclimBase
+except (ValueError):
+    # Python 2
+    import subclim_logging
+    from subclim_plugin import SubclimBase
+
 log = subclim_logging.getLogger("subclim")
 
 
