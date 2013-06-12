@@ -29,6 +29,15 @@ def auto_complete_changed():
 settings.add_on_change("subclim_auto_complete", auto_complete_changed)
 
 
+def offset_of_location(view, location):
+    '''we should get utf-8 size in bytes for eclim offset'''
+    text = view.substr(sublime.Region(0, location))
+    cr_size = 0
+    if view.line_endings() == 'Windows':
+        cr_size = text.count('\n')
+    return len(text.encode('utf-8')) + cr_size
+
+
 # worker thread for async tasks
 def worker():
     while True:
@@ -254,7 +263,8 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
         project, file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.word(pos)
-        locations = self.call_eclim(project, file, word.a, word.size())
+        offset = offset_of_location(self.view, word.a)
+        locations = self.call_eclim(project, file, offset, word.size())
         locations = self.to_list(locations)
 
         #  one definition was found and it is in a java file -> go there
@@ -302,7 +312,8 @@ class JavaGotoUsages(JavaGotoDefinition):
         project, file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.word(pos)
-        locations = self.call_eclim(project, file, word.a, word.size())
+        offset = offset_of_location(self.view, word.a)
+        locations = self.call_eclim(project, file, offset, word.size())
         locations = self.to_list(locations)
 
         if len(locations) == 1:
@@ -417,7 +428,8 @@ class JavaCompletions(sublime_plugin.EventListener):
             sublime.set_timeout(lambda: self.queue_completions(view), 0)
             return []
         project, fn = get_context(view)
-        pos = locations[0]
+        pos = offset_of_location(view, locations[0])
+
         proposals = self.to_proposals(c_func(project, fn, pos))
         return [(p.display, p.insert) for p in proposals]
 
