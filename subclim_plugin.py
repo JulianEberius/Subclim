@@ -612,39 +612,46 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
             return
         project, _file = get_context(self.view)
         pos = self.view.sel()[0]
-        word = self.view.substr(self.view.word(pos))
+        word = self.view.word(pos)
+        offset = offset_of_location(self.view, word.a)
         self.view.run_command("save")
 
         class_names = []
+        message = []
 
         def async_find_imports_task():
-            class_names.extend(self.call_eclim(project, _file, word))
+            import_result = self.call_eclim(project, _file, offset)
+            if isinstance(import_result, list):
+                class_names.extend(import_result)
+            elif isinstance(import_result, dict):
+                message.append(import_result['message'])
+            elif isinstance(import_result, str):
+                message.append(import_result)
             sublime.set_timeout(on_find_imports_finished, 0)
 
         def on_find_imports_finished():
-            if not class_names:
-                log.error("No suitable class found!")
+            if len(message) > 0:
+                log.error('\n'.join(message))
                 return
-            if len(class_names) == 1:
-                self.add_import(class_names[0], edit)
-            else:
-                self.edit = edit
+            elif len(class_names) > 1:
                 self.possible_imports = class_names
                 self.show_import_menu()
 
         tasks.put(async_find_imports_task)
 
-    def call_eclim(self, project, _file, identifier):
+    def call_eclim(self, project, _file, offset):
         eclim.update_java_src(project, _file)
         complete_cmd = "-command java_import \
-                                -n %s \
-                                -p %s" % (project, identifier)
-        class_name = eclim.call_eclim(complete_cmd)
-        class_name = json.loads(class_name)
-        if class_name:
-            return class_name
-        else:
-            return []
+                                -p %s \
+                                -f %s \
+                                -o %i \
+                                -e utf-8" % (project, _file, offset)
+        result = eclim.call_eclim(complete_cmd)
+        try:
+            result = json.loads(result)
+        except ValueError:
+            pass
+        return result
 
     def show_import_menu(self):
         self.view.window().show_quick_panel(
@@ -652,9 +659,14 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
             sublime.MONOSPACE_FONT)
 
     def import_selected(self, selected_idx):
-        self.add_import(self.possible_imports[selected_idx], self.edit)
+        self.view.run_command("java_add_import_class",
+            {'class_name': self.possible_imports[selected_idx]})
 
-    def add_import(self, class_name, edit):
+
+class JavaAddImportClass(sublime_plugin.TextCommand):
+    '''Will try to add a import statement to the current view.'''
+
+    def run(self, edit, class_name=None):
         import_string = "import " + class_name + ";\n"
         lines = self.view.lines(sublime.Region(0, self.view.size()))
         last_import_region = sublime.Region(-1, -1)
