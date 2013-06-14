@@ -2,13 +2,21 @@
 Enables Java completions / go to definition etc'''
 import sublime_plugin
 import sublime
-import eclim
 import re
 import os
 import json
-import Queue
 import threading
-import subclim_logging
+
+try:
+    # Python 3
+    from . import eclim
+    from . import subclim_logging
+    import queue
+except (ValueError):
+    # Python 2
+    import eclim
+    import subclim_logging
+    import Queue as queue
 
 log = subclim_logging.getLogger('subclim')
 settings = sublime.load_settings("Subclim.sublime-settings")
@@ -19,6 +27,15 @@ def auto_complete_changed():
     global auto_complete
     auto_complete = settings.get("subclim_auto_complete", True)
 settings.add_on_change("subclim_auto_complete", auto_complete_changed)
+
+
+def offset_of_location(view, location):
+    '''we should get utf-8 size in bytes for eclim offset'''
+    text = view.substr(sublime.Region(0, location))
+    cr_size = 0
+    if view.line_endings() == 'Windows':
+        cr_size = text.count('\n')
+    return len(text.encode('utf-8')) + cr_size
 
 
 # worker thread for async tasks
@@ -32,7 +49,7 @@ def worker():
             traceback.print_exc()
         finally:
             tasks.task_done()
-tasks = Queue.Queue()
+tasks = queue.Queue()
 t = threading.Thread(target=worker)
 t.daemon = True
 t.start()
@@ -246,7 +263,8 @@ class JavaGotoDefinition(sublime_plugin.TextCommand):
         project, file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.word(pos)
-        locations = self.call_eclim(project, file, word.a, word.size())
+        offset = offset_of_location(self.view, word.a)
+        locations = self.call_eclim(project, file, offset, word.size())
         locations = self.to_list(locations)
 
         #  one definition was found and it is in a java file -> go there
@@ -294,7 +312,8 @@ class JavaGotoUsages(JavaGotoDefinition):
         project, file = get_context(self.view)
         pos = self.view.sel()[0]
         word = self.view.word(pos)
-        locations = self.call_eclim(project, file, word.a, word.size())
+        offset = offset_of_location(self.view, word.a)
+        locations = self.call_eclim(project, file, offset, word.size())
         locations = self.to_list(locations)
 
         if len(locations) == 1:
@@ -340,7 +359,7 @@ class JavaRunClass(sublime_plugin.TextCommand):
             class_name = package_name + "." + class_name
         result = self.call_eclim(project, file_name, class_name)
         # print stdout of Java program to ST2's console
-        print result
+        print(result)
 
     def find_package_name(self):
         '''Searches the current file line by line for the
@@ -409,7 +428,8 @@ class JavaCompletions(sublime_plugin.EventListener):
             sublime.set_timeout(lambda: self.queue_completions(view), 0)
             return []
         project, fn = get_context(view)
-        pos = locations[0]
+        pos = offset_of_location(view, locations[0])
+
         proposals = self.to_proposals(c_func(project, fn, pos))
         return [(p.display, p.insert) for p in proposals]
 
@@ -559,13 +579,13 @@ class JavaValidation(sublime_plugin.EventListener):
 
         outlines = [view.line(view.text_point(lineno - 1, 0))
                     for lineno in lines.keys()
-                    if len(filter(lambda x: x['error'], lines[lineno])) > 0]
+                    if len(list(filter(lambda x: x['error'], lines[lineno]))) > 0]
         view.add_regions(
             'subclim-errors', outlines, 'keyword', 'dot', JavaValidation.drawType)
 
         outlines = [view.line(view.text_point(lineno - 1, 0))
                     for lineno in lines.keys()
-                    if len(filter(lambda x: x['error'], lines[lineno])) <= 0]
+                    if len(list(filter(lambda x: x['error'], lines[lineno]))) <= 0]
         view.add_regions(
             'subclim-warnings', outlines, 'comment', 'dot', JavaValidation.drawType)
 
@@ -592,39 +612,46 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
             return
         project, _file = get_context(self.view)
         pos = self.view.sel()[0]
-        word = self.view.substr(self.view.word(pos))
+        word = self.view.word(pos)
+        offset = offset_of_location(self.view, word.a)
         self.view.run_command("save")
 
         class_names = []
+        message = []
 
         def async_find_imports_task():
-            class_names.extend(self.call_eclim(project, _file, word))
+            import_result = self.call_eclim(project, _file, offset)
+            if isinstance(import_result, list):
+                class_names.extend(import_result)
+            elif isinstance(import_result, dict):
+                message.append(import_result['message'])
+            elif isinstance(import_result, str):
+                message.append(import_result)
             sublime.set_timeout(on_find_imports_finished, 0)
 
         def on_find_imports_finished():
-            if not class_names:
-                log.error("No suitable class found!")
+            if len(message) > 0:
+                log.error('\n'.join(message))
                 return
-            if len(class_names) == 1:
-                self.add_import(class_names[0], edit)
-            else:
-                self.edit = edit
+            elif len(class_names) > 1:
                 self.possible_imports = class_names
                 self.show_import_menu()
 
         tasks.put(async_find_imports_task)
 
-    def call_eclim(self, project, _file, identifier):
+    def call_eclim(self, project, _file, offset):
         eclim.update_java_src(project, _file)
         complete_cmd = "-command java_import \
-                                -n %s \
-                                -p %s" % (project, identifier)
-        class_name = eclim.call_eclim(complete_cmd)
-        class_name = json.loads(class_name)
-        if class_name:
-            return class_name
-        else:
-            return []
+                                -p %s \
+                                -f %s \
+                                -o %i \
+                                -e utf-8" % (project, _file, offset)
+        result = eclim.call_eclim(complete_cmd)
+        try:
+            result = json.loads(result)
+        except ValueError:
+            pass
+        return result
 
     def show_import_menu(self):
         self.view.window().show_quick_panel(
@@ -632,9 +659,14 @@ class JavaImportClassUnderCursor(sublime_plugin.TextCommand):
             sublime.MONOSPACE_FONT)
 
     def import_selected(self, selected_idx):
-        self.add_import(self.possible_imports[selected_idx], self.edit)
+        self.view.run_command("java_add_import_class",
+            {'class_name': self.possible_imports[selected_idx]})
 
-    def add_import(self, class_name, edit):
+
+class JavaAddImportClass(sublime_plugin.TextCommand):
+    '''Will try to add a import statement to the current view.'''
+
+    def run(self, edit, class_name=None):
         import_string = "import " + class_name + ";\n"
         lines = self.view.lines(sublime.Region(0, self.view.size()))
         last_import_region = sublime.Region(-1, -1)

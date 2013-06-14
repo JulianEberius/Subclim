@@ -1,4 +1,5 @@
 import sublime
+import sublime_plugin
 import logging
 
 
@@ -81,7 +82,7 @@ class ViewLogHandler(logging.Handler):
         # if we don't know where we're writing to, find it
         if self.view is None and self.name is not None:
             candidates = self.find_views(self.name)
-            print candidates
+            print(candidates)
             if len(candidates) > 0:
                 self.view = candidates[0]
 
@@ -92,14 +93,7 @@ class ViewLogHandler(logging.Handler):
 
         # insert text
         display = self.format(record)
-        self.view.set_read_only(False)
-        edit = self.view.begin_edit()
-        point = self.view.layout_to_text(self.view.layout_extent())
-        self.view.insert(edit, point, str(display) + "\n")
-        self.view.end_edit(edit)
-        self.view.set_read_only(True)
-        point = self.view.layout_to_text(self.view.layout_extent())
-        self.view.show(point)
+        self.view.run_command('write_log_to_new_file', {'output': display})
         return
 
 
@@ -135,3 +129,15 @@ def getLogger(name, flush=False):
     # log.setLevel(logging.DEBUG)
     log.setLevel(logging.ERROR)
     return log
+
+
+class WriteLogToNewFile(sublime_plugin.TextCommand):
+    '''write log output to a new file'''
+
+    def run(self, edit, output):
+        self.view.set_read_only(False)
+        point = self.view.layout_to_text(self.view.layout_extent())
+        self.view.insert(edit, point, str(output) + "\n")
+        self.view.set_read_only(True)
+        point = self.view.layout_to_text(self.view.layout_extent())
+        self.view.show(point)

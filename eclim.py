@@ -10,7 +10,18 @@ directory.
 import os
 import json
 import subprocess
-import subclim_logging
+try:
+    # Python 3
+    from . import subclim_logging
+except (ValueError):
+    # Python 2
+    import subclim_logging
+
+try:
+    unicode
+except NameError:
+    # Python 3
+    basestring = str
 
 # points to eclim executable, see module-level comments
 eclim_executable = None
@@ -55,6 +66,8 @@ def call_eclim(cmdline):
     
     popen = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell, startupinfo=sinfo)
     out, err = popen.communicate()
+    out = out.decode('utf-8')
+    err = err.decode('utf-8')
     log.debug("Results:\n" + out)
 
     # error handling
@@ -144,7 +157,7 @@ def parse_problems(out):
             filename = os.path.split(item['filename'])[1]
             isError = not item['warning']
             results["errors"].append({"file": filename, "line": item['line'], "message": item['message'], "filepath": item['filename'], "error": isError})
-    except Exception, e:
+    except Exception as e:
         log.error(e)
         results["errors"].append({"eclim_exception": str(e)})
     return results
