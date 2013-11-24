@@ -28,11 +28,14 @@ eclim_executable = None
 
 log = subclim_logging.getLogger('subclim')
 
+
 class EclimExecutionException(Exception):
     pass
 
+
 class NotInEclipseProjectException(Exception):
     pass
+
 
 def call_eclim(cmdline):
     ''' Generic call to eclim including error-handling '''
@@ -55,7 +58,7 @@ def call_eclim(cmdline):
     else:
         raise EclimExecutionException('Unknown command line passed. ' + repr(cmd) + ' ' + (type(cmd)))
     log.info('Run: %s', cmd)
-    
+
     # running with shell=False spawns new command windows for
     # each execution of eclim_executable
     sinfo = None
@@ -63,7 +66,7 @@ def call_eclim(cmdline):
         sinfo = subprocess.STARTUPINFO()
         sinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         sinfo.wShowWindow = subprocess.SW_HIDE
-    
+
     popen = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=shell, startupinfo=sinfo)
     out, err = popen.communicate()
     out = out.decode('utf-8')
@@ -82,6 +85,7 @@ def call_eclim(cmdline):
         log.error(error_msg)
         raise EclimExecutionException(error_msg)
     return out
+
 
 def get_context(filename):
     project_path = find_project_dir(filename)
@@ -103,7 +107,7 @@ def get_context(filename):
                 return item['name'], relative
     except ValueError:
         subclim_logging.show_error_msg("Could not parse Eclim's response. "
-            "Are you running Eclim version 1.7.3 or greater?")
+                                       "Are you running Eclim version 1.7.3 or greater?")
     return None, None
 
 

@@ -82,7 +82,7 @@ class ViewLogHandler(logging.Handler):
         # if we don't know where we're writing to, find it
         if self.view is None and self.name is not None:
             candidates = self.find_views(self.name)
-            print(candidates)
+            # print(candidates)
             if len(candidates) > 0:
                 self.view = candidates[0]
 
