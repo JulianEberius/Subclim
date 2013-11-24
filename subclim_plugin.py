@@ -569,6 +569,7 @@ class JavaValidation(sublime_plugin.EventListener):
                     line_messages[vid][l_no] = []
                 line_messages[vid][l_no].append(e)
             self.visualize(view)
+            self.on_selection_modified(view)
 
         tasks.put(async_validate_task)
 
