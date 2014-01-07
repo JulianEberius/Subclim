@@ -357,8 +357,11 @@ class JavaRunClass(sublime_plugin.TextCommand):
         package_name = self.find_package_name()
         if package_name:
             class_name = package_name + "." + class_name
+        print()
+        print("Running: ", class_name)
         result = self.call_eclim(project, file_name, class_name)
         # print stdout of Java program to ST2's console
+        print("---------")
         print(result)
 
     def find_package_name(self):
@@ -372,6 +375,48 @@ class JavaRunClass(sublime_plugin.TextCommand):
             if m:
                 return m.group(1)
         return None
+
+    def call_eclim(self, project, file_name, class_name):
+        eclim.update_java_src(project, file_name)
+        go_to_cmd = ['-command', 'java', '-p', project, '-c', class_name]
+        out = eclim.call_eclim(go_to_cmd)
+        return out
+
+
+class ScalaRunClass(sublime_plugin.TextCommand):
+    '''Runs the current class as Scala program, good for testing
+    small Scala-"Scripts"'''
+
+    def run(self, edit, block=False):
+        if not check_eclim(self.view):
+            return
+
+        project, file_name = get_context(self.view)
+        class_name = self.find_qualified_scala_name()
+        print()
+        print("Running: ", class_name)
+        result = self.call_eclim(project, file_name, class_name)
+        # print stdout of Java program to ST2's console
+        print("--------")
+        print(result)
+
+    def find_qualified_scala_name(self):
+        line_regions = self.view.split_by_newlines(
+            sublime.Region(0, self.view.sel()[0].a))
+
+        for line_region in reversed(line_regions):
+            line = self.view.substr(line_region)
+            m = re.search(r'object ([^\s]*)', line)
+            if not m:
+                continue
+            class_name = m.group(1)
+            for line_region in line_regions:
+                line = self.view.substr(line_region)
+                m = re.search(r'package (.*)$', line)
+                if not m:
+                    return
+                package_name = m.group(1)
+                return package_name + "." + class_name
 
     def call_eclim(self, project, file_name, class_name):
         eclim.update_java_src(project, file_name)
