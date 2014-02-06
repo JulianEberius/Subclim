@@ -345,7 +345,61 @@ class JavaGotoUsages(JavaGotoDefinition):
         return out
 
 
-class JavaRunClass(sublime_plugin.TextCommand):
+class RunClass(object):
+    def get_arguments(self, callback):
+        s = self.view.settings()
+        last_args = s.get('subclim.last_arguments', "")
+
+        def save_and_callback(response):
+            s.set('subclim.last_arguments', response)
+            callback(response)
+
+        self.view.window().show_input_panel(
+            "Arguments",
+            last_args, save_and_callback, None, None)
+
+    def display_in_view(self, doc):
+        window = self.view.window()
+        create_view_in_same_group = False
+
+        v = self.find_runclass_view()
+        if not v:
+            active_group = window.active_group()
+            if not create_view_in_same_group:
+                if window.num_groups() == 1:
+                    window.run_command('new_pane', {'move': False})
+                if active_group == 0:
+                    window.focus_group(1)
+                else:
+                    window.focus_group(active_group-1)
+
+            window.new_file(sublime.TRANSIENT)
+            v = window.active_view()
+            v.set_name("*run_output*")
+            v.set_scratch(True)
+
+        v.set_read_only(False)
+        v.run_command("simple_clear_and_insert", {"insert_string": doc})
+        v.set_read_only(True)
+        window.focus_view(v)
+
+    def find_runclass_view(self):
+        '''
+        Return view named *run_output* if exists, None otherwise.
+        '''
+        for w in self.view.window().views():
+            if w.name() == "*run_output*":
+                return w
+        return None
+
+    def call_eclim(self, project, file_name, class_name, args=""):
+        eclim.update_java_src(project, file_name)
+        go_to_cmd = ['-command', 'java', '-p', project, '-c', class_name, '-a'] + args.split(" ")
+        out = eclim.call_eclim(go_to_cmd)
+        return out
+
+
+class JavaRunClass(sublime_plugin.TextCommand, RunClass):
     '''Runs the current class as Java program, good for testing
     small Java-"Scripts"'''
 
@@ -357,12 +411,16 @@ class JavaRunClass(sublime_plugin.TextCommand):
         package_name = self.find_package_name()
         if package_name:
             class_name = package_name + "." + class_name
-        print()
-        print("Running: ", class_name)
-        result = self.call_eclim(project, file_name, class_name)
-        # print stdout of Java program to ST2's console
-        print("---------")
-        print(result)
+
+        def callback(args):
+            self.display_in_view("Running %s with %s" % (class_name, " ".join(args)))
+
+            def run_task():
+                result = self.call_eclim(project, file_name, class_name, args)
+                self.display_in_view(result)
+            tasks.put(run_task)
+
+        self.get_arguments(callback)
 
     def find_package_name(self):
         '''Searches the current file line by line for the
@@ -376,14 +434,8 @@ class JavaRunClass(sublime_plugin.TextCommand):
                 return m.group(1)
         return None
 
-    def call_eclim(self, project, file_name, class_name):
-        eclim.update_java_src(project, file_name)
-        go_to_cmd = ['-command', 'java', '-p', project, '-c', class_name]
-        out = eclim.call_eclim(go_to_cmd)
-        return out
 
-
-class ScalaRunClass(sublime_plugin.TextCommand):
+class ScalaRunClass(sublime_plugin.TextCommand, RunClass):
     '''Runs the current class as Scala program, good for testing
     small Scala-"Scripts"'''
 
@@ -393,12 +445,16 @@ class ScalaRunClass(sublime_plugin.TextCommand):
 
         project, file_name = get_context(self.view)
         class_name = self.find_qualified_scala_name()
-        print()
-        print("Running: ", class_name)
-        result = self.call_eclim(project, file_name, class_name)
-        # print stdout of Java program to ST2's console
-        print("--------")
-        print(result)
+
+        def callback(args):
+            self.display_in_view("Running %s with %s" % (class_name, args))
+
+            def run_task():
+                result = self.call_eclim(project, file_name, class_name, args)
+                self.display_in_view(result)
+            tasks.put(run_task)
+
+        self.get_arguments(callback)
 
     def find_qualified_scala_name(self):
         line_regions = self.view.split_by_newlines(
@@ -417,12 +473,6 @@ class ScalaRunClass(sublime_plugin.TextCommand):
                     return
                 package_name = m.group(1)
                 return package_name + "." + class_name
-
-    def call_eclim(self, project, file_name, class_name):
-        eclim.update_java_src(project, file_name)
-        go_to_cmd = ['-command', 'java', '-p', project, '-c', class_name]
-        out = eclim.call_eclim(go_to_cmd)
-        return out
 
 
 class CompletionProposal(object):

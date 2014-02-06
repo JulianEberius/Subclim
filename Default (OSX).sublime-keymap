@@ -24,12 +24,12 @@
             { "key": "selector", "operator": "equal", "operand": "source.scala" }
         ]
     },
-    { "keys": ["alt+super+r"], "command": "java_run_class", "context":
+    { "keys": ["ctrl+super+r"], "command": "java_run_class", "context":
         [
             { "key": "selector", "operator": "equal", "operand": "source.java" }
         ]
     },
-    { "keys": ["alt+super+r"], "command": "scala_run_class", "context":
+    { "keys": ["ctrl+super+r"], "command": "scala_run_class", "context":
         [
             { "key": "selector", "operator": "equal", "operand": "source.scala" }
         ]
