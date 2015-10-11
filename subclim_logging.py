@@ -110,10 +110,10 @@ def getLogger(name, flush=False):
     fmt = logging.Formatter('%(asctime)s - %(levelname)-8s - %(message)s')
 
     # add in a ViewLogHandlder
-    handler = ViewLogHandler(name='* ' + name + ' logs *')
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(fmt)
-    log.addHandler(handler)
+    # handler = ViewLogHandler(name='* ' + name + ' logs *')
+    # handler.setLevel(logging.DEBUG)
+    # handler.setFormatter(fmt)
+    # log.addHandler(handler)
 
     # add in a status bar handler for errors
     handler = StatusBarLogHandler(name)

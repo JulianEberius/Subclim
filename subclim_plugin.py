@@ -538,9 +538,9 @@ class JavaCompletions(sublime_plugin.EventListener):
 
     def complete_func(self, view):
         syntax = view.settings().get("syntax")
-        if "Java.tmLanguage" in syntax:
+        if "Java" in syntax:
             return self.call_eclim_java
-        elif "Scala.tmLanguage" in syntax:
+        elif "Scala" in syntax:
             return self.call_eclim_scala
         else:
             return None
